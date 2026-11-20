@@ -1,0 +1,35 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+venv/
+.venv/
+env/
+.env
+ENV/
+conda-env/
+
+# IDE / Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Data cache (keep raw/processed template or generated files tracked or ignored as needed)
+# Exclude large dump files if any
+*.log

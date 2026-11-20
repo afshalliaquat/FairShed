@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FairShed Public Electricity Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="styles.css?v=6">
+</head>
+<body class="public-page bg-[#f4f6fc] text-slate-800 min-h-screen">
+  <header class="public-header text-white">
+    <div class="max-w-7xl mx-auto px-5 py-5 flex items-center justify-between gap-4">
+      <div>
+        <p class="text-xs uppercase tracking-[0.2em] text-indigo-300">Public electricity service</p>
+        <h1 class="text-2xl font-extrabold mt-1" style="font-family: 'Outfit', sans-serif;">FairShed Karachi</h1>
+        <p class="text-xs text-slate-300 mt-1">Know your area. Plan your day. Stay powered.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:inline-flex items-center gap-2 text-xs text-emerald-300"><span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>Service online</span>
+        <a href="/" class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold">Admin sign in</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-5 py-8 space-y-6">
+    <section class="public-hero rounded-3xl p-6 md:p-8 text-white overflow-hidden relative">
+      <div class="relative z-10 max-w-2xl">
+        <span class="public-eyebrow">Today's city view</span>
+        <h2 class="text-3xl md:text-4xl font-extrabold mt-3" style="font-family: 'Outfit', sans-serif;">Power information made simple.</h2>
+        <p class="text-sm text-indigo-100 mt-3 max-w-xl">Check your locality, understand planned interruptions, and find the best time to use energy.</p>
+        <div class="flex flex-wrap gap-3 mt-6">
+          <label class="sr-only" for="publicLocalitySelect">Choose locality</label>
+          <select id="publicLocalitySelect" class="public-select">
+            <option value="all">All Karachi localities</option>
+          </select>
+          <button id="publicLocateButton" type="button" class="public-action-button"><i class="fa-solid fa-location-crosshairs mr-2"></i>View locality</button>
+        </div>
+      </div>
+      <div class="public-hero-orb"></div>
+      <div class="public-hero-grid"></div>
+    </section>
+
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="public-stat-card"><span class="public-stat-icon bg-emerald-100 text-emerald-600"><i class="fa-solid fa-bolt"></i></span><div><p class="public-stat-label">Areas online</p><p id="publicOnlineCount" class="public-stat-value">--</p></div></div>
+      <div class="public-stat-card"><span class="public-stat-icon bg-amber-100 text-amber-600"><i class="fa-solid fa-clock"></i></span><div><p class="public-stat-label">Planned today</p><p id="publicOutageCount" class="public-stat-value">--</p></div></div>
+      <div class="public-stat-card"><span class="public-stat-icon bg-sky-100 text-sky-600"><i class="fa-solid fa-shield-heart"></i></span><div><p class="public-stat-label">Critical protected</p><p id="publicProtectedCount" class="public-stat-value">--</p></div></div>
+      <div class="public-stat-card"><span class="public-stat-icon bg-indigo-100 text-indigo-600"><i class="fa-solid fa-rotate"></i></span><div><p class="public-stat-label">Last refreshed</p><p id="publicUpdatedAt" class="public-stat-value text-sm">Loading...</p></div></div>
+    </section>
+
+    <section class="public-focus-card">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p class="public-eyebrow text-indigo-600">Your selected locality</p>
+          <h2 id="publicSelectedName" class="text-2xl font-bold mt-1">All Karachi localities</h2>
+          <p id="publicSelectedSummary" class="text-sm text-slate-500 mt-1">Select a locality above to see its public status.</p>
+        </div>
+        <span id="publicSelectedBadge" class="public-status-badge">Overview</span>
+      </div>
+      <div id="publicSelectedDetails" class="hidden grid grid-cols-2 md:grid-cols-4 gap-3 mt-5"></div>
+    </section>
+
+    <section id="publicLocalityTools" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="public-tool-card public-countdown-card">
+        <div class="flex items-center gap-3">
+          <span class="public-tool-icon"><i class="fa-solid fa-hourglass-half"></i></span>
+          <div><p class="public-eyebrow text-indigo-600">Live estimate</p><h2 class="text-lg font-bold">Outage countdown</h2></div>
+        </div>
+        <p id="publicCountdownLabel" class="text-sm text-slate-500 mt-4">Select a locality and click View locality.</p>
+        <p id="publicCountdown" class="public-countdown-value">--:--:--</p>
+        <p id="publicCountdownNote" class="text-xs text-slate-500 mt-2"></p>
+      </div>
+      <div class="public-tool-card">
+        <div class="flex items-center gap-3">
+          <span class="public-tool-icon bg-emerald-100 text-emerald-600"><i class="fa-regular fa-comments"></i></span>
+          <div><p class="public-eyebrow text-emerald-600">Quick help</p><h2 class="text-lg font-bold">Ask about this locality</h2></div>
+        </div>
+        <form id="publicQueryForm" class="flex gap-2 mt-4">
+          <input id="publicQueryInput" class="public-query-input" placeholder="e.g. When is the next outage?" autocomplete="off">
+          <button class="public-query-button" type="submit">Ask</button>
+        </form>
+        <div id="publicQueryAnswer" class="public-query-answer mt-3">Ask about status, schedule, outage time, or protection.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div><h2 class="text-lg font-bold">Locality status</h2><p class="text-xs text-slate-500">Tap a card to focus the map and schedule.</p></div>
+        <div class="public-filter-group" role="group" aria-label="Filter localities">
+          <button class="public-filter active" data-filter="all">All</button><button class="public-filter" data-filter="outage">Planned outage</button><button class="public-filter" data-filter="protected">Protected</button>
+        </div>
+      </div>
+      <section id="publicAreaCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"></section>
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="public-panel">
+        <div class="flex items-center justify-between gap-3 mb-3"><div><h2 class="font-bold">Live locality map</h2><p class="text-xs text-slate-500">Select a marker to inspect an area.</p></div><button id="publicMapReset" type="button" class="public-small-button">Reset view</button></div>
+        <div id="publicMap" class="h-[28rem] rounded-xl overflow-hidden"></div>
+        <p class="text-[11px] text-slate-400 mt-2">Locality service points are approximate.</p>
+      </div>
+      <div class="public-panel overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-3"><div><h2 class="font-bold">24-hour public schedule</h2><p class="text-xs text-slate-500">Purple blocks indicate planned interruption.</p></div><i class="fa-solid fa-calendar-days text-indigo-500"></i></div>
+        <div id="publicScheduleTimeline" class="public-timeline"></div>
+        <div id="publicScheduleBody" class="space-y-2 mt-4"></div>
+      </div>
+    </section>
+  </main>
+  <script src="public.js?v=7"></script>
+</body>
+</html>

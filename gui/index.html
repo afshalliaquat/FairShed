@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FairShed - Electricity Demand Forecast & Fair Load-Shedding Scheduler</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            }
+          },
+          gridTemplateColumns: {
+            '24': 'repeat(24, minmax(0, 1fr))',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Leaflet map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css?v=7">
+</head>
+<body class="bg-[#f4f6fc] text-slate-800 antialiased min-h-screen flex">
+
+  <div id="adminLoginOverlay" class="admin-login-overlay fairshade-login">
+    <button id="introSkipBtn" type="button" onclick="skipIntroAnimation()" class="fairshade-skip">Skip intro</button>
+    <div class="fairshade-intro" aria-hidden="true">
+      <div class="fairshade-glow"></div>
+      <svg class="fairshade-bulb-svg" viewBox="0 0 84 110" fill="none">
+        <path d="M42 6C24 6 12 19 12 36c0 11 6 18 12 25 3 4 4 7 4 12h28c0-5 1-8 4-12 6-7 12-14 12-25C72 19 60 6 42 6Z" fill="#16264a" stroke="#34497a" stroke-width="2"/>
+        <g class="fairshade-bulb-on">
+          <path d="M42 6C24 6 12 19 12 36c0 11 6 18 12 25 3 4 4 7 4 12h28c0-5 1-8 4-12 6-7 12-14 12-25C72 19 60 6 42 6Z" fill="#ffc94a" stroke="#ffe08f" stroke-width="2"/>
+          <path d="M34 73V50l8 8 8-8v23" stroke="#fff6d9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+        <rect x="28" y="78" width="28" height="8" rx="2" fill="#34497a"/>
+        <rect x="31" y="90" width="22" height="8" rx="2" fill="#34497a"/>
+        <path d="M36 100h12l-2 6H38l-2-6Z" fill="#34497a"/>
+      </svg>
+      <h1>Fair Shade</h1>
+      <p>Equal power cuts for every area.</p>
+    </div>
+    <div class="fairshade-shell">
+      <section class="fairshade-brand">
+        <div class="fairshade-glow" aria-hidden="true"></div>
+        <svg class="fairshade-bulb-svg" viewBox="0 0 84 110" fill="none" aria-hidden="true">
+          <path d="M42 6C24 6 12 19 12 36c0 11 6 18 12 25 3 4 4 7 4 12h28c0-5 1-8 4-12 6-7 12-14 12-25C72 19 60 6 42 6Z" fill="#16264a" stroke="#34497a" stroke-width="2"/>
+          <path d="M42 6C24 6 12 19 12 36c0 11 6 18 12 25 3 4 4 7 4 12h28c0-5 1-8 4-12 6-7 12-14 12-25C72 19 60 6 42 6Z" fill="#ffc94a" stroke="#ffe08f" stroke-width="2"/>
+          <path d="M34 73V50l8 8 8-8v23" stroke="#fff6d9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="28" y="78" width="28" height="8" rx="2" fill="#34497a"/>
+          <rect x="31" y="90" width="22" height="8" rx="2" fill="#34497a"/>
+          <path d="M36 100h12l-2 6H38l-2-6Z" fill="#34497a"/>
+        </svg>
+        <h1>Fair Shade</h1>
+        <p>Equal power cuts for every area.</p>
+        <div class="fairshade-viz" aria-hidden="true">
+          <svg class="fairshade-city" id="fairshadeCity" viewBox="0 0 440 176"></svg>
+          <div class="fairshade-zones" id="fairshadeZones">
+            <span>Area 1</span><span>Area 2</span><span>Area 3</span><span>Area 4</span>
+          </div>
+        </div>
+        <small>The darkness moves on, so no area waits longer than another.</small>
+      </section>
+      <section class="fairshade-side">
+        <form id="adminLoginForm" class="fairshade-form" novalidate>
+          <h2>Welcome back</h2>
+          <p class="fairshade-sub">Log in to see your area's schedule.</p>
+          <div class="fairshade-field">
+            <label for="adminEmail">Email</label>
+            <input id="adminEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+          </div>
+          <div class="fairshade-field">
+            <label for="adminPassword">Password</label>
+            <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="Your password" required>
+            <button class="fairshade-eye" type="button" onclick="togglePasswordVisibility()" aria-label="Show password">Show</button>
+          </div>
+          <div class="fairshade-row">
+            <label><input type="checkbox" id="remember"> Remember me</label>
+            <a href="#forgot" onclick="handleForgotPassword(event)">Forgot password?</a>
+          </div>
+          <p class="fairshade-msg" id="adminLoginError" role="alert"></p>
+          <button class="fairshade-login-btn" id="adminLoginBtn" type="submit">
+            <span class="fairshade-spinner" hidden></span><span id="adminLoginBtnText">Log in</span>
+          </button>
+          <p class="fairshade-foot">New here? <a href="#signup" onclick="handleSignUp(event)">Create an account</a></p>
+          <p class="fairshade-public-link"><a href="/public.html">View Public Karachi Outage Map &rarr;</a></p>
+        </form>
+      </section>
+    </div>
+    <div id="loginToast" class="login-toast hidden"></div>
+  </div>
+
+  <!-- ==================== LEFT SIDEBAR ==================== -->
+  <aside id="appSidebar" class="app-sidebar w-64 bg-[#0d121f] text-slate-300 flex flex-col justify-between p-5 select-none flex-shrink-0 z-30 sticky top-0 h-screen overflow-y-auto">
+    <div>
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-3 px-2 mb-7 cursor-pointer" onclick="switchTab('dashboard')">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-bolt text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-extrabold text-white tracking-tight leading-none" style="font-family: 'Outfit', sans-serif;">FairShed</h1>
+          <p class="text-[10px] text-slate-400 font-medium tracking-wider mt-1 uppercase">Smarter. Fairer. Balanced.</p>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="space-y-1.5">
+        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="nav-item nav-pill-active w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all">
+          <i class="fa-solid fa-house w-4 text-center"></i>
+          <span>Dashboard</span>
+        </button>
+
+        <button id="nav-eda" onclick="switchTab('eda')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-chart-simple w-4 text-center"></i>
+          <span>Demand & Seasonal EDA</span>
+        </button>
+
+        <button id="nav-forecast" onclick="switchTab('forecast')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-chart-line w-4 text-center"></i>
+          <span>Demand Forecasting</span>
+        </button>
+
+        <button id="nav-scheduler" onclick="switchTab('scheduler')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-scale-balanced w-4 text-center"></i>
+          <span>Fair Scheduler (Live)</span>
+        </button>
+
+        <button id="nav-schedule" onclick="switchTab('schedule')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-calendar-days w-4 text-center"></i>
+          <span>24-Hour Schedule</span>
+        </button>
+
+        <button id="nav-fairness" onclick="switchTab('fairness')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-chart-pie w-4 text-center"></i>
+          <span>Fairness Analysis</span>
+        </button>
+
+        <button id="nav-playground" onclick="switchTab('playground')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-sliders w-4 text-center"></i>
+          <span>Scenario Simulator</span>
+        </button>
+
+        <button id="nav-experiments" onclick="switchTab('experiments')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-flask w-4 text-center"></i>
+          <span>AI Lab Syllabus Tasks</span>
+        </button>
+
+        <button id="nav-settings" onclick="switchTab('settings')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-gear w-4 text-center"></i>
+          <span>Settings</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Bottom Controls & System Status -->
+    <div class="space-y-3.5 pt-4 border-t border-slate-800/80">
+      
+      <!-- System Status Card with Transmission Grid graphic -->
+      <div class="sidebar-status relative bg-gradient-to-b from-[#141b2d] to-[#0e1424] border border-slate-800 rounded-xl p-3 overflow-hidden" title="All Systems Online">
+        <div class="relative z-10">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="status-icon w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+            <span class="status-label text-xs font-bold text-white tracking-wide">All Systems Online</span>
+          </div>
+          <p class="status-detail text-[10px] text-slate-400">Connected to Grid Telemetry</p>
+          <p class="status-detail text-[10px] text-slate-300 font-mono mt-0.5" id="currentTimeDisplay">Mon, Nov 10, 2026 • 14:30</p>
+        </div>
+        
+        <!-- Electric Grid Tower Vector Illustration -->
+        <svg class="absolute right-1 -bottom-2 w-16 h-16 opacity-30 text-indigo-400" viewBox="0 0 100 100" fill="currentColor">
+          <path d="M50 5 L55 25 L75 35 L57 40 L65 75 L85 85 L55 85 L50 95 L45 85 L15 85 L35 75 L43 40 L25 35 L45 25 Z" stroke="currentColor" stroke-width="2" fill="none"/>
+          <line x1="20" y1="35" x2="80" y2="35" stroke="currentColor" stroke-width="2"/>
+          <line x1="25" y1="55" x2="75" y2="55" stroke="currentColor" stroke-width="2"/>
+        </svg>
+      </div>
+
+      <!-- Theme Toggle Switch -->
+      <div class="flex items-center justify-between px-2">
+        <span class="theme-label text-xs font-semibold text-slate-400">Theme</span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="themeToggle" class="sr-only peer">
+          <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 flex items-center justify-between px-1.5 text-[10px] text-amber-400">
+            <i class="fa-solid fa-sun"></i>
+            <i class="fa-solid fa-moon text-indigo-200"></i>
+          </div>
+        </label>
+      </div>
+
+      <!-- User Profile Badge -->
+      <div class="sidebar-profile flex items-center justify-between p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800/80 transition-all cursor-pointer" title="Log out" onclick="logoutAdmin()">
+        <div class="flex items-center gap-2.5">
+          <div class="profile-icon w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center font-bold text-white text-xs shadow-md">
+            <span class="profile-initial">A</span>
+            <i class="fa-solid fa-right-to-bracket profile-login-icon hidden"></i>
+          </div>
+          <div class="profile-detail">
+            <h4 class="text-xs font-bold text-white leading-tight">Administrator</h4>
+            <p class="text-[10px] text-slate-400 font-medium">Admin account</p>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-down text-slate-500 text-xs"></i>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN CONTENT AREA ==================== -->
+  <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+
+    <!-- Top Header Bar -->
+    <header class="app-header h-16 px-8 py-3 bg-white/70 backdrop-blur-md border-b border-slate-200/80 flex items-center justify-between sticky top-0 z-20">
+      <button id="sidebarToggle" onclick="toggleSidebar()" class="sidebar-toggle w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all" aria-label="Toggle sidebar" title="Collapse sidebar">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      
+      <!-- Right Action Items -->
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200/70 text-slate-600 text-xs font-medium">
+          <i class="fa-regular fa-calendar text-indigo-500"></i>
+          <span>Mon, Nov 10, 2026 • 14:30</span>
+        </div>
+
+        <button onclick="alert('System Status: 10 Sectors Connected. SCADA Telemetry Streaming at 1-hour cadence.')" class="relative w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200/80 flex items-center justify-center text-slate-600 transition-all">
+          <i class="fa-regular fa-bell text-sm"></i>
+          <span class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-white"></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Dynamic Content Container -->
+    <div class="p-8 space-y-6 flex-1">
+
+      <!-- ==================== TAB 1: MAIN DASHBOARD ==================== -->
+      <div id="view-dashboard" class="space-y-6 tab-view">
+
+        <!-- Panoramic Twilight Hero Banner -->
+        <div class="hero-banner p-7 text-white shadow-xl shadow-indigo-950/20">
+          <div class="relative z-10 max-w-2xl">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+                <i class="fa-solid fa-bolt text-lg text-amber-300"></i>
+              </div>
+              <h2 class="text-3xl font-extrabold tracking-tight" style="font-family: 'Outfit', sans-serif;">FairShed</h2>
+            </div>
+            
+            <h3 class="text-base font-bold text-indigo-100 mb-1">
+              Electricity Demand Forecast & Fair Load-Shedding Scheduler
+            </h3>
+            <p class="text-xs text-indigo-200/90 font-medium">
+              AI-Powered. Constraint-Aware. Fair for Everyone.
+            </p>
+
+          </div>
+
+          <!-- Top-Right Badge -->
+          <div class="absolute top-6 right-6 z-10 flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold backdrop-blur-md">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              Next 24h Forecast
+            </span>
+          </div>
+
+          <!-- Skyline Silhouette & Pylon Tower Overlay -->
+          <svg class="skyline-overlay" viewBox="0 0 600 200" fill="currentColor">
+            <rect x="250" y="80" width="25" height="120" opacity="0.3" fill="#ffffff"/>
+            <rect x="280" y="60" width="30" height="140" opacity="0.4" fill="#ffffff"/>
+            <rect x="315" y="90" width="22" height="110" opacity="0.25" fill="#ffffff"/>
+            <rect x="340" y="50" width="35" height="150" opacity="0.4" fill="#ffffff"/>
+            <rect x="380" y="70" width="28" height="130" opacity="0.3" fill="#ffffff"/>
+            <rect x="412" y="100" width="24" height="100" opacity="0.2" fill="#ffffff"/>
+            <rect x="440" y="65" width="38" height="135" opacity="0.35" fill="#ffffff"/>
+            <rect x="482" y="85" width="30" height="115" opacity="0.25" fill="#ffffff"/>
+
+            <g transform="translate(140, 10) scale(1.1)" stroke="#f8fafc" stroke-width="1.8" fill="none" opacity="0.75">
+              <line x1="60" y1="10" x2="40" y2="170" />
+              <line x1="60" y1="10" x2="80" y2="170" />
+              <line x1="25" y1="50" x2="95" y2="50" />
+              <line x1="30" y1="85" x2="90" y2="85" />
+              <line x1="38" y1="120" x2="82" y2="120" />
+              <line x1="45" y1="50" x2="75" y2="85" />
+              <line x1="75" y1="50" x2="45" y2="85" />
+              <line x1="48" y1="85" x2="72" y2="120" />
+              <line x1="72" y1="85" x2="48" y2="120" />
+            </g>
+          </svg>
+        </div>
+
+        <!-- 4 Top KPI Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div class="glass-card p-4.5 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-500">Total Observations</p>
+                <h4 id="kpiTotalObs" class="text-2xl font-extrabold text-slate-800 tracking-tight mt-0.5">17,376 hrs</h4>
+                <p class="text-[11px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-arrow-trend-up text-[10px]"></i>
+                  <span>2 Years Hourly Data</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-bolt"></i>
+              </div>
+            </div>
+            <div class="h-10 mt-2">
+              <canvas id="sparkline1"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-card p-4.5 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-500">Avg. Demand</p>
+                <h4 id="kpiAvgDemand" class="text-2xl font-extrabold text-slate-800 tracking-tight mt-0.5">15,134 MW</h4>
+                <p class="text-[11px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-arrow-trend-up text-[10px]"></i>
+                  <span>+1.8% vs last week</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-chart-simple"></i>
+              </div>
+            </div>
+            <div class="h-10 mt-2">
+              <canvas id="sparkline2"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-card p-4.5 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-500">Peak Load</p>
+                <h4 id="kpiPeakDemand" class="text-2xl font-extrabold text-slate-800 tracking-tight mt-0.5">18,825 MW</h4>
+                <p class="text-[11px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-arrow-trend-up text-[10px]"></i>
+                  <span>Summer Peak AC Load</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-plug"></i>
+              </div>
+            </div>
+            <div class="h-10 mt-2">
+              <canvas id="sparkline3"></canvas>
+            </div>
+          </div>
+
+          <div class="glass-card p-4.5 flex flex-col justify-between">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-xs font-semibold text-slate-500">Fairness Score (Jain's)</p>
+                <h4 id="fairnessScoreKpi" class="text-2xl font-extrabold text-slate-800 tracking-tight mt-0.5">98.8%</h4>
+                <p class="text-[11px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-shield-halved text-[10px]"></i>
+                  <span>Zero Hospital Outage</span>
+                </p>
+              </div>
+              <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-scale-balanced"></i>
+              </div>
+            </div>
+            <div class="h-10 mt-2">
+              <canvas id="sparkline4"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Middle Row: Demand Forecast & City Load Map -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+          <!-- Left Card: Demand Forecast -->
+          <div class="lg:col-span-7 glass-card p-5.5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-chart-line text-indigo-600"></i>
+                  <h3 class="text-sm font-bold text-slate-800">Next-Day Demand Forecast (Hourly)</h3>
+                </div>
+                <button onclick="switchTab('forecast')" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1">
+                  View Models &rarr;
+                </button>
+              </div>
+
+              <div class="flex items-center gap-4 text-xs font-semibold text-slate-600 mb-2">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Actual Demand
+                </span>
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span> Predicted Demand (RF)
+                </span>
+              </div>
+
+              <div class="relative h-56 w-full">
+                <div class="absolute top-2 right-24 z-10 bg-slate-900 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg pointer-events-none">
+                  18.2k MW Peak
+                </div>
+                <canvas id="demandChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Models Comparison Sub-Panel -->
+            <div class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-4">
+              <div>
+                <div class="flex justify-between text-[11px] font-semibold text-slate-600 mb-1">
+                  <span>Random Forest</span>
+                  <span class="text-slate-800 font-bold">MAE: 241.6 MW</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5">
+                  <div class="bg-blue-500 h-1.5 rounded-full w-[95%]"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-[11px] font-semibold text-slate-600 mb-1">
+                  <span>Linear Regression</span>
+                  <span class="text-slate-800 font-bold">MAE: 266.1 MW</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5">
+                  <div class="bg-purple-600 h-1.5 rounded-full w-[85%]"></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Right Card: City Load Map -->
+          <div class="lg:col-span-5 glass-card city-map-card p-5.5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-map-location-dot text-indigo-600"></i>
+                  <h3 class="text-sm font-bold text-slate-800">Karachi Locality Load Map (10 Sectors)</h3>
+                </div>
+                <button onclick="switchTab('scheduler')" class="text-xs font-semibold px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition-all">
+                  Open Live Scheduler
+                </button>
+              </div>
+
+              <div class="relative city-map-shell bg-slate-50/70 rounded-xl p-2 border border-slate-200/60 h-64 flex">
+                <div class="absolute top-3 left-3 flex flex-col gap-1 z-10">
+                  <button id="cityMapZoomIn" type="button" class="w-6 h-6 rounded bg-white shadow-sm border border-slate-200 text-xs font-bold text-slate-700 flex items-center justify-center hover:bg-slate-50" aria-label="Zoom in">+</button>
+                  <button id="cityMapZoomOut" type="button" class="w-6 h-6 rounded bg-white shadow-sm border border-slate-200 text-xs font-bold text-slate-700 flex items-center justify-center hover:bg-slate-50" aria-label="Zoom out">-</button>
+                  <button id="cityMapReset" type="button" class="w-6 h-6 rounded bg-white shadow-sm border border-slate-200 text-xs font-bold text-slate-700 flex items-center justify-center hover:bg-slate-50" aria-label="Reset map view" title="Reset map view">⌂</button>
+                </div>
+
+                <div id="cityMapContainer" class="flex-1 h-full city-map-container"></div>
+
+                <div class="w-36 pl-2 border-l border-slate-200/60 flex flex-col justify-center overflow-y-auto" id="mapLegendContainer"></div>
+              </div>
+            </div>
+
+            <p class="text-[11px] text-slate-400 mt-2 italic text-center">
+              Click any sector to inspect demand, priority tier, and outage limits.
+            </p>
+          </div>
+
+        </div>
+
+        <!-- Bottom Row: Dashboard Controls and Insights -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          <!-- Card 1: Fair Load-Shedding Scheduler -->
+          <div class="glass-card p-5.5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <div class="flex items-center gap-2">
+                  <i class="fa-solid fa-wand-magic-sparkles text-indigo-600"></i>
+                  <h3 class="text-sm font-bold text-slate-800">Fair Load-Shedding Scheduler</h3>
+                </div>
+                <button onclick="switchTab('scheduler')" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold">
+                  Tune &rarr;
+                </button>
+              </div>
+              <p class="text-xs text-slate-500 mb-4">
+                Select an algorithm to generate an optimal and fair schedule.
+              </p>
+
+              <div class="p-4 rounded-xl border border-indigo-100 bg-indigo-50/40">
+                <label for="dashboardAlgoSelect" class="block text-xs font-bold text-slate-700 mb-2">Scheduling algorithm</label>
+                <div class="flex gap-2">
+                  <select id="dashboardAlgoSelect" onchange="selectAlgorithm(this.value)" class="flex-1 px-3 py-2 rounded-lg border border-indigo-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    <option value="csp">CSP Backtracking (MRV + Forward Checking)</option>
+                    <option value="hill_climbing">Steepest-Ascent Hill Climbing</option>
+                    <option value="random_restart">Random-Restart Hill Climbing</option>
+                    <option value="genetic">Genetic Algorithm</option>
+                  </select>
+                  <button onclick="selectAlgorithm(document.getElementById('dashboardAlgoSelect')?.value || 'csp')" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700">
+                    Run
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Active: <strong id="activeAlgoLabel" class="text-slate-800">CSP Backtracking</strong></span>
+              <span class="text-emerald-600 font-bold"><i class="fa-solid fa-check"></i> 0 Violations</span>
+            </div>
+          </div>
+
+          <!-- Card 3: Key Insights -->
+          <div class="glass-card p-5.5 relative overflow-hidden flex flex-col justify-between">
+            <div class="relative z-10">
+              <div class="flex items-center gap-2 mb-3">
+                <i class="fa-regular fa-lightbulb text-amber-500 text-base"></i>
+                <h3 class="text-sm font-bold text-slate-800">Key Insights</h3>
+              </div>
+
+              <ul class="space-y-3 text-xs text-slate-600">
+                <li class="flex items-start gap-2.5">
+                  <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-[10px] mt-0.5">
+                    <i class="fa-solid fa-check"></i>
+                  </span>
+                  <span>Demand will peak at <strong class="text-slate-800">18.2k MW</strong> tonight.</span>
+                </li>
+
+                <li class="flex items-start gap-2.5">
+                  <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-[10px] mt-0.5">
+                    <i class="fa-solid fa-check"></i>
+                  </span>
+                  <span>Load will be fairly distributed across all 10 areas.</span>
+                </li>
+
+                <li class="flex items-start gap-2.5">
+                  <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-[10px] mt-0.5">
+                    <i class="fa-solid fa-check"></i>
+                  </span>
+                  <span>Hospital areas are protected (0h blackout).</span>
+                </li>
+
+                <li class="flex items-start gap-2.5">
+                  <span class="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-[10px] mt-0.5">
+                    <i class="fa-solid fa-check"></i>
+                  </span>
+                  <span>Iftar (18:00–19:30) & Sehri (04:00) constraints respected.</span>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Mosque Minarets / Dome Silhouette Watermark -->
+            <svg class="mosque-watermark text-indigo-900" viewBox="0 0 200 150" fill="currentColor">
+              <rect x="25" y="40" width="8" height="110"/>
+              <polygon points="29,20 22,40 36,40"/>
+              <path d="M 60 150 L 60 90 Q 100 20 140 90 L 140 150 Z"/>
+              <circle cx="100" cy="30" r="4"/>
+              <path d="M 98 15 Q 106 18 102 26 Q 94 22 98 15 Z"/>
+              <rect x="165" y="40" width="8" height="110"/>
+              <polygon points="169,20 162,40 176,40"/>
+            </svg>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ==================== TAB 2: DEMAND & SEASONAL EDA ==================== -->
+      <div id="view-eda" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">📊 Historical Electricity Demand & Seasonal EDA</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Explore time series data, summer cooling peaks, and Pakistani grid diurnal cycles.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="text-xs font-semibold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <!-- Date Filter Controls -->
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <label class="text-xs font-bold text-slate-700">Start Date:</label>
+              <input type="date" id="edaStartDate" value="2023-01-01" class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500">
+              
+              <label class="text-xs font-bold text-slate-700 ml-2">End Date:</label>
+              <input type="date" id="edaEndDate" value="2024-12-31" class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div class="flex items-center flex-wrap gap-2">
+              <span class="text-[11px] font-bold text-slate-500 mr-1">Presets:</span>
+              <button onclick="setEDAPreset('all')" class="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-slate-700 transition-all">Full 2 Years</button>
+              <button onclick="setEDAPreset('summer')" class="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 hover:bg-rose-50 hover:text-rose-700 rounded-lg text-slate-700 transition-all">🔥 Summer Peak</button>
+              <button onclick="setEDAPreset('winter')" class="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-700 rounded-lg text-slate-700 transition-all">❄️ Winter Trough</button>
+              <button onclick="setEDAPreset('ramadan')" class="px-2.5 py-1 text-[11px] font-semibold bg-white border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 rounded-lg text-slate-700 transition-all">🌙 Ramadan</button>
+              <button onclick="loadEDAData()" class="ml-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all flex items-center gap-1.5">
+                <i class="fa-solid fa-filter text-[11px]"></i> Apply Filter
+              </button>
+            </div>
+          </div>
+
+          <!-- EDA Statistics Cards -->
+          <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="p-3.5 bg-blue-50/60 border border-blue-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-blue-600">Filtered Records</p>
+              <h4 id="edaCount" class="text-xl font-extrabold text-blue-950 mt-0.5">17,376 hrs</h4>
+            </div>
+            <div class="p-3.5 bg-purple-50/60 border border-purple-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-purple-600">Mean Demand</p>
+              <h4 id="edaMean" class="text-xl font-extrabold text-purple-950 mt-0.5">15,134 MW</h4>
+            </div>
+            <div class="p-3.5 bg-rose-50/60 border border-rose-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-rose-600">Peak Load</p>
+              <h4 id="edaMax" class="text-xl font-extrabold text-rose-950 mt-0.5">18,825 MW</h4>
+            </div>
+            <div class="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-emerald-600">Min Base Load</p>
+              <h4 id="edaMin" class="text-xl font-extrabold text-emerald-950 mt-0.5">11,200 MW</h4>
+            </div>
+          </div>
+
+          <!-- Time Series Chart -->
+          <div class="mb-6">
+            <h3 class="text-sm font-bold text-slate-800 mb-2">Hourly Electricity Consumption Timeline (MW)</h3>
+            <div class="h-64 w-full bg-white border border-slate-100 rounded-xl p-2">
+              <canvas id="edaTimeSeriesChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Diurnal Hourly Profile & Monthly Seasonality -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 mb-2">Average Diurnal Profile (Hour 0 - 23 Peak Cycle)</h3>
+              <div class="h-56 w-full bg-white border border-slate-100 rounded-xl p-2">
+                <canvas id="edaDiurnalChart"></canvas>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 mb-2">Monthly Seasonality (Summer Heatwaves vs Winter)</h3>
+              <div class="h-56 w-full bg-white border border-slate-100 rounded-xl p-2">
+                <canvas id="edaMonthlyChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 3: DEMAND FORECASTING & REGRESSION ==================== -->
+      <div id="view-forecast" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">🎯 Supervised Learning: Next-Day Hourly Demand Models</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Comparison of Random Forest and Linear Regression models.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="text-xs font-semibold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <!-- Model Benchmark Table -->
+          <div class="overflow-x-auto mb-6">
+            <table class="w-full text-left border-collapse bg-white rounded-xl overflow-hidden border border-slate-200">
+              <thead class="bg-slate-50 text-[11px] font-bold text-slate-600 border-b border-slate-200">
+                <tr>
+                  <th class="p-3">Model Architecture</th>
+                  <th class="p-3">Implementation</th>
+                  <th class="p-3">MAE (MW)</th>
+                  <th class="p-3">RMSE (MW)</th>
+                  <th class="p-3">MAPE (%)</th>
+                  <th class="p-3">R² Score</th>
+                  <th class="p-3">Mean Bias Error (MBE)</th>
+                </tr>
+              </thead>
+              <tbody class="text-xs divide-y divide-slate-100 font-medium">
+                <tr class="bg-indigo-50/40 font-bold text-indigo-950">
+                  <td class="p-3"><i class="fa-solid fa-tree text-indigo-600 mr-2"></i>Random Forest Regressor</td>
+                  <td class="p-3">Scikit-Learn Ensemble</td>
+                  <td class="p-3 text-emerald-600">241.64 MW</td>
+                  <td class="p-3">306.41 MW</td>
+                  <td class="p-3 text-emerald-600">1.61%</td>
+                  <td class="p-3 font-extrabold text-indigo-600">0.9509</td>
+                  <td class="p-3">-30.06 MW</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-semibold text-slate-800"><i class="fa-solid fa-chart-line text-purple-600 mr-2"></i>Linear Regression</td>
+                  <td class="p-3">StandardScaler + OLS</td>
+                  <td class="p-3">266.18 MW</td>
+                  <td class="p-3">336.80 MW</td>
+                  <td class="p-3">1.77%</td>
+                  <td class="p-3">0.9406</td>
+                  <td class="p-3">-17.12 MW</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 7-Day Out-of-Sample Demand Forecast vs Actual Load -->
+          <div class="mb-6">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-bold text-slate-800">7-Day Out-of-Sample Demand Forecast vs Actual Load (MW)</h3>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="flex items-center gap-1 font-semibold text-slate-800"><span class="w-3 h-0.5 bg-slate-900 inline-block"></span> Actual</span>
+                <span class="flex items-center gap-1 font-semibold text-indigo-600"><span class="w-3 h-0.5 bg-indigo-600 inline-block"></span> Random Forest</span>
+                <span class="flex items-center gap-1 font-semibold text-blue-600"><span class="w-3 h-0.5 border-t border-dashed border-blue-600 inline-block"></span> Linear Regression</span>
+              </div>
+            </div>
+            <div class="h-64 w-full bg-white border border-slate-100 rounded-xl p-2">
+              <canvas id="forecastCompareChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Feature Importance Section -->
+          <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <h3 class="text-sm font-bold text-slate-800 mb-2">Random Forest Feature Importance (Why the Model Predicts Well)</h3>
+            <div class="space-y-2 text-xs">
+              <div>
+                <div class="flex justify-between font-semibold mb-1">
+                  <span>1. lag_168h (Same Hour 1 Week Ago)</span>
+                  <span class="font-bold text-indigo-600">92.65%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2">
+                  <div class="bg-indigo-600 h-2 rounded-full w-[92.65%]"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between font-semibold mb-1">
+                  <span>2. lag_24h (Same Hour Yesterday)</span>
+                  <span class="font-bold text-indigo-600">1.29%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2">
+                  <div class="bg-indigo-500 h-2 rounded-full w-[15%]"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between font-semibold mb-1">
+                  <span>3. lag_1h (Immediate Preceding Hour)</span>
+                  <span class="font-bold text-indigo-600">1.21%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2">
+                  <div class="bg-indigo-400 h-2 rounded-full w-[14%]"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between font-semibold mb-1">
+                  <span>4. temperature_c (Ambient Temperature driving AC)</span>
+                  <span class="font-bold text-indigo-600">0.70%</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2">
+                  <div class="bg-purple-500 h-2 rounded-full w-[10%]"></div>
+                </div>
+              </div>
+              <div class="p-4 bg-blue-50/40 rounded-xl border border-blue-100 mt-4">
+                <h3 class="text-sm font-bold text-slate-800 mb-1">Linear Regression Coefficients (How It Uses Features)</h3>
+                <p class="text-[11px] text-slate-500 mb-3">These values use standardized features. Positive values raise the forecast; negative values lower it.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                  <div class="flex justify-between"><span class="font-semibold">lag_168h</span><span class="font-bold text-emerald-600">+707.48</span></div>
+                  <div class="flex justify-between"><span class="font-semibold">lag_1h</span><span class="font-bold text-emerald-600">+355.35</span></div>
+                  <div class="flex justify-between"><span class="font-semibold">lag_24h</span><span class="font-bold text-emerald-600">+258.95</span></div>
+                  <div class="flex justify-between"><span class="font-semibold">rolling_mean_24h</span><span class="font-bold text-emerald-600">+140.33</span></div>
+                  <div class="flex justify-between"><span class="font-semibold">is_weekend</span><span class="font-bold text-rose-600">-233.27</span></div>
+                  <div class="flex justify-between"><span class="font-semibold">lag_2h</span><span class="font-bold text-rose-600">-144.78</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 4: LIVE FAIR SCHEDULER ==================== -->
+      <div id="view-scheduler" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">⚖️ Live Fair Load-Shedding Scheduler & Solver</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Dynamically adjust grid generation, constraints, and trigger CSP vs Hill Climbing in real time.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="text-xs font-semibold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <!-- Live Interactive Controls Grid -->
+          <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div>
+              <label class="text-xs font-bold text-slate-700 block mb-1">Algorithm Engine:</label>
+              <select id="liveAlgoSelect" class="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white font-semibold">
+                <option value="csp">CSP Backtracking (MRV + Forward Checking)</option>
+                <option value="hill_climbing">Steepest-Ascent Hill Climbing</option>
+                <option value="random_restart">Random-Restart Hill Climbing</option>
+                <option value="genetic">Genetic Algorithm (Evolutionary)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-xs font-bold text-slate-700 block mb-1">Available Generation Ratio: <span id="lblGenRatio" class="text-indigo-600 font-extrabold">82%</span></label>
+              <input type="range" id="rngGenRatio" min="70" max="95" value="82" step="1" class="w-full accent-indigo-600" oninput="document.getElementById('lblGenRatio').textContent = this.value + '%'">
+            </div>
+
+            <div>
+              <label class="text-xs font-bold text-slate-700 block mb-1">Max Daily Outage Limit: <span id="lblDailyLimit" class="text-indigo-600 font-extrabold">4 Hours</span></label>
+              <input type="range" id="rngDailyLimit" min="1" max="6" value="4" step="1" class="w-full accent-indigo-600" oninput="document.getElementById('lblDailyLimit').textContent = this.value + ' Hours'">
+            </div>
+
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="chkRamadan" checked class="w-4 h-4 text-indigo-600 rounded">
+              <label for="chkRamadan" class="text-xs font-semibold text-slate-700">Enforce Ramadan (Iftar 18-19h & Sehri 04h)</label>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="chkHospital" checked class="w-4 h-4 text-indigo-600 rounded">
+              <label for="chkHospital" class="text-xs font-semibold text-slate-700">Strict Hospital Feeder Exemption (0h)</label>
+            </div>
+
+            <div class="flex justify-end">
+              <button onclick="runLiveScheduler()" class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-md transition-all">
+                <i class="fa-solid fa-play mr-1.5"></i> Run Live Scheduler
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Scheduler Output Metrics -->
+          <div class="grid grid-cols-4 gap-4 mb-6">
+            <div class="p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-emerald-700">Jain's Fairness Index</p>
+              <h4 id="schedJains" class="text-2xl font-extrabold text-emerald-950 mt-0.5">0.988 (98.8%)</h4>
+            </div>
+            <div class="p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-indigo-700">Outage Std Deviation</p>
+              <h4 id="schedStd" class="text-2xl font-extrabold text-indigo-950 mt-0.5">0.31 Hours</h4>
+            </div>
+            <div class="p-3.5 bg-purple-50 border border-purple-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-purple-700">Max - Min Spread</p>
+              <h4 id="schedSpread" class="text-2xl font-extrabold text-purple-950 mt-0.5">1 Hour</h4>
+            </div>
+            <div class="p-3.5 bg-blue-50 border border-blue-100 rounded-xl">
+              <p class="text-[11px] font-semibold text-blue-700">Rule Violations</p>
+              <h4 id="schedViolations" class="text-2xl font-extrabold text-blue-950 mt-0.5">0 (100% Compliant)</h4>
+            </div>
+          </div>
+
+          <!-- Live Power Balance Chart -->
+          <div class="mb-6">
+            <h3 class="text-sm font-bold text-slate-800 mb-2">Hourly Power Balance: Demand vs Generation Capacity vs Shed Load</h3>
+            <div class="h-64 w-full bg-white border border-slate-100 rounded-xl p-2">
+              <canvas id="schedPowerBalanceChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Live Fairness Bar Chart -->
+          <div>
+            <h3 class="text-sm font-bold text-slate-800 mb-2">Fairness Bar Chart: Outage Hours Allocation Across All 10 City Sectors</h3>
+            <div class="h-64 w-full bg-white border border-slate-100 rounded-xl p-2">
+              <canvas id="schedFairnessBarChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 5: 24-HOUR DETAILED SCHEDULE ==================== -->
+      <div id="view-schedule" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">Complete 24-Hour Schedule Matrix (All 10 Sectors)</h2>
+              <p class="text-xs text-slate-500 mt-1">Full hourly breakdown of breaker switches across the city network.</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <button onclick="exportScheduleCSV()" class="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"><i class="fa-solid fa-file-csv mr-1"></i> Export CSV</button>
+              <button onclick="switchTab('dashboard')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 text-[11px] font-bold text-slate-500 bg-slate-50/50">
+                  <th class="px-3 py-2.5">Sector / Feeder</th>
+                  <th class="px-2 py-2.5">Category</th>
+                  <th class="px-2 py-2.5">Base MW</th>
+                  <th class="px-1 py-2.5 text-center text-[10px]" colspan="24">Hour 00:00 to 23:00 (Green = Power On, Purple = Shed)</th>
+                  <th class="px-3 py-2.5 text-center">Total Outage</th>
+                </tr>
+              </thead>
+              <tbody id="fullScheduleTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 6: FAIRNESS ANALYSIS ==================== -->
+      <div id="view-fairness" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">📊 Fairness & Equity Deep-Dive</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Mathematical evaluation of load-shedding fairness across urban socioeconomic zones.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="text-xs font-semibold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="p-5 bg-white border border-slate-200 rounded-xl space-y-3">
+              <h4 class="text-sm font-bold text-slate-800">Jain's Fairness Index Formulation</h4>
+              <p class="text-xs text-slate-600">
+                Measures how equally blackout hours \(x_i\) are divided among non-critical neighborhoods:
+              </p>
+              <div class="p-3 bg-slate-50 rounded-lg font-mono text-xs text-indigo-700">
+                J(x₁, ..., xₙ) = (Σ xᵢ)² / [ n · Σ (xᵢ)² ]
+              </div>
+              <ul class="text-xs text-slate-600 space-y-1 list-disc pl-4">
+                <li><strong>J = 1.0 (100%)</strong>: Absolute equity (every neighborhood receives identical hours).</li>
+                <li><strong>J → 1/n</strong>: Severe unfairness (one area absorbs all blackouts).</li>
+                <li><strong>Current FairShed Score: 0.988 (98.8% Fair)</strong> with standard deviation of only 0.31 hours.</li>
+              </ul>
+            </div>
+
+            <div class="p-5 bg-white border border-slate-200 rounded-xl space-y-3">
+              <h4 class="text-sm font-bold text-slate-800">Societal Protection Guarantees</h4>
+              <ul class="text-xs text-slate-700 space-y-2.5">
+                <li class="flex items-center gap-2">
+                  <i class="fa-solid fa-hospital text-sky-500 w-4"></i>
+                  <span><strong>Hospital Protection</strong>: 0.0 Outage Hours (Allama Iqbal / Jinnah Feeder is 100% immune).</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <i class="fa-solid fa-moon text-amber-500 w-4"></i>
+                  <span><strong>Ramadan Meals</strong>: Zero outages during Sehri (04:00) and Iftar (18:00–19:30).</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <i class="fa-solid fa-ban text-rose-500 w-4"></i>
+                  <span><strong>Consecutive Cap</strong>: No feeder is shed for more than 2 consecutive hours.</span>
+                </li>
+                <li class="flex items-center gap-2">
+                  <i class="fa-solid fa-coins text-purple-500 w-4"></i>
+                  <span><strong>Socio-Economic Cost</strong>: Industrial spine protected from long unannounced disruptions.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 7: SCENARIO PLAYGROUND ==================== -->
+      <div id="view-playground" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">🔮 Interactive What-If Scenario Simulator</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Adjust weather conditions and prior loads to simulate real-time model forecasts.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="text-xs font-semibold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <!-- Scenario Controls -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5 p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6">
+            <div>
+              <label class="text-xs font-bold text-slate-700 block mb-1">Hour of Day (0 - 23): <span id="lblSimHour" class="text-indigo-600 font-bold">14:00</span></label>
+              <input type="range" id="simHour" min="0" max="23" value="14" class="w-full accent-indigo-600" oninput="document.getElementById('lblSimHour').textContent = this.value + ':00'; updateScenarioPrediction();">
+            </div>
+
+            <div>
+              <label class="text-xs font-bold text-slate-700 block mb-1">Ambient Temperature: <span id="lblSimTemp" class="text-indigo-600 font-bold">36.0 °C</span></label>
+              <input type="range" id="simTemp" min="5" max="48" value="36" step="0.5" class="w-full accent-indigo-600" oninput="document.getElementById('lblSimTemp').textContent = this.value + ' °C'; updateScenarioPrediction();">
+            </div>
+
+            <div>
+              <label class="text-xs font-bold text-slate-700 block mb-1">Demand 24h Ago (Yesterday): <span id="lblSimLag24" class="text-indigo-600 font-bold">15,800 MW</span></label>
+              <input type="range" id="simLag24" min="8000" max="22000" value="15800" step="100" class="w-full accent-indigo-600" oninput="document.getElementById('lblSimLag24').textContent = Number(this.value).toLocaleString() + ' MW'; updateScenarioPrediction();">
+            </div>
+          </div>
+
+          <!-- Simulated Predictions Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+            <div class="p-4 bg-white border border-indigo-100 rounded-xl shadow-sm">
+              <p class="text-xs font-semibold text-slate-500">Random Forest Forecast</p>
+              <h4 id="predRf" class="text-2xl font-extrabold text-indigo-600 mt-1">16,240 MW</h4>
+              <p class="text-[11px] text-emerald-600 font-bold mt-1">Non-linear weather interaction</p>
+            </div>
+
+            <div class="p-4 bg-white border border-purple-100 rounded-xl shadow-sm">
+              <p class="text-xs font-semibold text-slate-500">Linear Regression Forecast</p>
+              <h4 id="predLinear" class="text-2xl font-extrabold text-purple-600 mt-1">16,080 MW</h4>
+              <p class="text-[11px] text-slate-500 font-medium mt-1">Linear cooling degree slope</p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 8: AI LAB EXPERIMENTS SHOWCASE ==================== -->
+      <div id="view-experiments" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">AI Laboratory Tasks & Syllabus Benchmark</h2>
+              <p class="text-xs text-slate-500 mt-1">Supervised demand forecasting with Random Forest and Linear Regression.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-magnifying-glass text-indigo-600 mr-2"></i>Tasks 2 & 3: Uninformed vs Informed Search</h4>
+                <button onclick="runExperimentAPI('search')" class="text-[11px] px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded">Run Live</button>
+              </div>
+              <p class="text-xs text-slate-600 mb-3">Comparing BFS, DFS, UCS, Greedy Best-First, and A* for feeder shedding subset selection at peak deficit.</p>
+              <div id="expSearchResults" class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
+                <div>• BFS   : 4 nodes expanded | 2 feeders shed | Cost: 600.0</div>
+                <div>• UCS   : 59 nodes expanded | 2 feeders shed | Cost: 250.0 (Optimal)</div>
+                <div>• A*    : 37 nodes expanded | 2 feeders shed | Cost: 250.0 (Provably Optimal)</div>
+              </div>
+            </div>
+
+            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-wave-square text-emerald-600 mr-2"></i>Task 6: 2D Kalman Filter & HMM</h4>
+                <button onclick="runExperimentAPI('kalman')" class="text-[11px] px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded">Denoise Sensor</button>
+              </div>
+              <p class="text-xs text-slate-600 mb-3">Recursive state-space estimator denoising raw SCADA telemetry and Viterbi algorithm decoding hidden grid stress states.</p>
+              <div id="expKalmanResults" class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono mb-2">
+                <div>• Raw Sensor Noise: std = 100 MW (Telemetry Variance)</div>
+                <div>• Kalman Filter Estimate: Filters noise with zero lag</div>
+                <div>• HMM Viterbi: Decodes [Normal, Stressed, Emergency] states</div>
+              </div>
+              <div class="h-36 w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5">
+                <canvas id="kalmanChart"></canvas>
+              </div>
+            </div>
+
+            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
+              <h4 class="text-sm font-bold text-slate-800 mb-2"><i class="fa-solid fa-brain text-purple-600 mr-2"></i>Task 7: Supervised Regression</h4>
+              <p class="text-xs text-slate-600 mb-3">Random Forest Regressor compared with Linear Regression.</p>
+              <div class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
+                <div>• Random Forest: MAE = 241.6 MW | R² = 0.9509 | MAPE = 1.61%</div>
+                <div>• Linear Regression: MAE = 266.1 MW | R² = 0.9406</div>
+              </div>
+            </div>
+
+            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-network-wired text-amber-600 mr-2"></i>Task 8 & 9: K-Means & Q-Learning</h4>
+                <button onclick="runExperimentAPI('kmeans')" class="text-[11px] px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded">Cluster Feeders</button>
+              </div>
+              <p class="text-xs text-slate-600 mb-3">Unsupervised Lloyd's clustering for feeder archetypes & Q-learning agent dispatching load shedding.</p>
+              <div id="expKmeansResults" class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
+                <div>• K-Means: 4 Clusters (Hospital Exempt, Industrial, Urban, Rural)</div>
+                <div>• Q-Learning: 44 state-action pairs | ε decayed to 0.05</div>
+                <div>• Policy: Zero hospital violations, balanced residential outages</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB 9: SETTINGS ==================== -->
+      <div id="view-settings" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6 max-w-2xl">
+          <h2 class="text-xl font-bold text-slate-800 mb-4">⚙️ FairShed System Settings</h2>
+          <div class="space-y-4 text-xs">
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div>
+                <h5 class="font-bold text-slate-800">Hospital Immunity Constraint</h5>
+                <p class="text-slate-500">Permanently lock hospital feeder breakers to energized status (0h outage).</p>
+              </div>
+              <input type="checkbox" checked disabled class="w-4 h-4 text-indigo-600 rounded">
+            </div>
+
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div>
+                <h5 class="font-bold text-slate-800">Ramadan Schedule Auto-Detection</h5>
+                <p class="text-slate-500">Automatically protect hours 04:00 (Sehri) and 18:00-19:30 (Iftar).</p>
+              </div>
+              <input type="checkbox" checked class="w-4 h-4 text-indigo-600 rounded">
+            </div>
+
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+              <div>
+                <h5 class="font-bold text-slate-800">Model Refresh Cadence</h5>
+                <p class="text-slate-500">Retrain day-ahead regressors on every 24-hour cycle completion.</p>
+              </div>
+              <span class="font-bold text-indigo-600">Daily 00:00 UTC</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Area Details Interactive Modal -->
+  <div id="areaModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center hidden" onclick="if(event.target === this) closeAreaModal()">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 m-4 relative animate-in fade-in zoom-in duration-150">
+      <button onclick="closeAreaModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold text-lg transition-all">&times;</button>
+      <div id="areaModalContent"></div>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js?v=13"></script>
+</body>
+</html>

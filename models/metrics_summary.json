@@ -1,0 +1,20 @@
+[
+  {
+    "Model": "random_forest_model",
+    "MAE": 241.71,
+    "RMSE": 306.41,
+    "MAPE_%": 1.61,
+    "R2_Score": 0.9509,
+    "MBE": -29.93,
+    "Max_Error": 1410.85
+  },
+  {
+    "Model": "linear_regression_model",
+    "MAE": 266.18,
+    "RMSE": 336.8,
+    "MAPE_%": 1.77,
+    "R2_Score": 0.9406,
+    "MBE": -17.12,
+    "Max_Error": 1344.07
+  }
+]
