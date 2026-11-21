@@ -10,12 +10,11 @@ Implements optimization schedulers from scratch without external optimization li
 """
 
 from dataclasses import dataclass
-import math
 import time
-from typing import Callable, Dict, List, Tuple
+from typing import Dict, List, Tuple
 import numpy as np
 
-from src.city_grid import FeederArea, CityGridNetwork
+from src.city_grid import CityGridNetwork
 
 
 @dataclass
@@ -179,13 +178,13 @@ class HillClimbingScheduler:
         """Steepest-Ascent Hill Climbing with sampled neighborhood moves."""
         start_time = time.perf_counter()
         current = self.generate_initial_schedule()
-        current_loss, violations = self.evaluator.evaluate(current)
+        current_loss, _ = self.evaluator.evaluate(current)
 
         history = [current_loss]
         n_feeders = self.evaluator.n_feeders
         hours = self.evaluator.hours
 
-        for it in range(max_iterations):
+        for _ in range(max_iterations):
             best_neighbor = None
             best_neighbor_loss = current_loss
 
@@ -343,7 +342,7 @@ class GeneticAlgorithmScheduler:
         best_loss = float("inf")
         history = []
 
-        for gen in range(generations):
+        for _ in range(generations):
             losses = [self.evaluator.evaluate(ind)[0] for ind in pop]
             fitnesses = [1.0 / (1.0 + (loss / 1000.0)) for loss in losses]
 

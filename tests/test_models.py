@@ -22,7 +22,7 @@ def test_chronological_split_prevents_leakage():
         }
     )
 
-    X_train, X_test, y_train, y_test, ts_train, ts_test = chronological_split(
+    X_train, X_test, _, _, ts_train, ts_test = chronological_split(
         df, feature_cols=["feature_a"], test_size=0.2
     )
 

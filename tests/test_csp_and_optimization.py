@@ -1,6 +1,5 @@
 """Unit tests for CSP Backtracking and Optimization Schedulers (Tasks 4 & 5)."""
 
-import pytest
 import numpy as np
 from src.city_grid import CityGridNetwork
 from src.csp_scheduler import FairLoadSheddingCSP

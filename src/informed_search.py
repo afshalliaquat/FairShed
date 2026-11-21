@@ -6,11 +6,10 @@ Implements pure Python heuristic search algorithms without external search libra
    admissible & consistent heuristic, proving optimal feeder shedding selection.
 """
 
-from dataclasses import dataclass
 import heapq
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Tuple
 
-from src.city_grid import FeederArea, CityGridNetwork
+from src.city_grid import CityGridNetwork
 from src.uninformed_search import SearchResult, _get_eligible_feeders
 
 
@@ -39,7 +38,7 @@ def greedy_best_first_search_shedding(
     nodes_expanded = 0
 
     while pq:
-        h, _, idx, current_mw, shed_ids, current_cost = heapq.heappop(pq)
+        _, _, idx, current_mw, shed_ids, current_cost = heapq.heappop(pq)
         nodes_expanded += 1
 
         if current_mw >= target_shortfall_mw:
@@ -130,7 +129,7 @@ def a_star_search_shedding(
     nodes_expanded = 0
 
     while pq:
-        f_score, _, g_cost, idx, current_mw, shed_ids = heapq.heappop(pq)
+        _, _, g_cost, idx, current_mw, shed_ids = heapq.heappop(pq)
         nodes_expanded += 1
 
         if current_mw >= target_shortfall_mw:

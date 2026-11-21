@@ -14,12 +14,12 @@ Implements:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 
-from src.city_grid import FeederArea, CityGridNetwork, get_default_city_feeders
+from src.city_grid import FeederArea, CityGridNetwork
 
 
 class EnvironmentProperty(Enum):

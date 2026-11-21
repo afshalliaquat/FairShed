@@ -9,11 +9,11 @@ Applies clustering to segment city electrical sectors into archetypal operationa
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional
 import numpy as np
 import pandas as pd
 
-from src.city_grid import FeederArea, CityGridNetwork, get_default_city_feeders
+from src.city_grid import CityGridNetwork
 
 
 @dataclass

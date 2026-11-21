@@ -13,10 +13,9 @@ Provides shortfall calculations, protected timing windows (Iftar, Sehri),
 and hourly area demand decomposition.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 import numpy as np
-import pandas as pd
 
 
 @dataclass
@@ -236,7 +235,6 @@ class CityGridNetwork:
         rng = np.random.default_rng(seed)
         n = len(city_total_demands)
         peak_demand = np.max(city_total_demands)
-        mean_demand = np.mean(city_total_demands)
 
         # Base available capacity set to cover ~82% of peak demand on average
         nominal_capacity = peak_demand * (1.0 - average_shortfall_ratio)

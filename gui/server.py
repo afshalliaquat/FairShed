@@ -20,8 +20,7 @@ from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qs, urlparse
-import joblib
+from urllib.parse import urlparse
 import numpy as np
 import pandas as pd
 
@@ -723,8 +722,6 @@ class FairShedHandler(SimpleHTTPRequestHandler):
 
             rf_pred = float(models_dict["random_forest_model"].predict(input_row)[0]) if "random_forest_model" in models_dict else sim_lag_24h + 250.0
             linear_pred = float(models_dict["linear_regression_model"].predict(input_row)[0]) if "linear_regression_model" in models_dict else sim_lag_24h + 180.0
-            base_pred = float(sim_lag_24h)
-
             data = {
                 "random_forest": round(rf_pred, 1),
                 "linear_regression": round(linear_pred, 1),
@@ -781,9 +778,9 @@ def run_server(port: int = PORT, open_browser: bool = True):
     url = f"http://localhost:{port}"
 
     print("=" * 70)
-    print("⚡ FairShed Full-Stack AI Platform running!")
-    print(f"👉 Local URL : {url}")
-    print(f"📁 Root Dir  : {GUI_DIR}")
+    print("FairShed Full-Stack AI Platform running!")
+    print(f"Local URL : {url}")
+    print(f"Root Dir  : {GUI_DIR}")
     print("=" * 70)
 
     if open_browser:

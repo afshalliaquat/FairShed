@@ -69,3 +69,46 @@ def test_dispatch_options_compare_ucs_and_astar_for_all_available_teams():
         team["ucs"]["travel_minutes"] == team["astar"]["travel_minutes"]
         for team in result["options"]
     )
+
+
+def test_dispatch_options_include_bfs_and_dfs_routes_and_recommendations():
+    service = MaintenanceDispatchService()
+    result = service.get_team_route_options("F03_COMM_A")
+
+    assert result["bfs_recommended_team_id"] == "TEAM_B"
+    assert result["dfs_recommended_team_id"] is not None
+    assert all(
+        team["bfs"] is not None and team["dfs"] is not None
+        for team in result["options"]
+    )
+
+    bfs_route = service.find_route_bfs("TEAM_A", "F03_COMM_A")
+    dfs_route = service.find_route_dfs("TEAM_A", "F03_COMM_A")
+    assert bfs_route is not None and len(bfs_route) == 2
+    assert dfs_route is not None and len(dfs_route) > len(bfs_route)
+    assert service._route_cost(dfs_route) > service._route_cost(bfs_route)
+
+
+def test_bfs_and_dfs_assignment_store_selected_algorithm_and_estimate():
+    for algorithm in ("BFS", "DFS"):
+        service = MaintenanceDispatchService()
+        submitted = service.submit_complaint(
+            area_id="F03_COMM_A",
+            hour=12,
+            scheduled_off=False,
+        )
+        expected_route = getattr(service, f"find_route_{algorithm.lower()}")(
+            "TEAM_A",
+            "F03_COMM_A",
+        )
+        assert expected_route is not None
+
+        assigned = service.assign_complaint(
+            submitted.complaint_id,
+            "TEAM_A",
+            algorithm,
+        )
+
+        assert assigned is not None
+        assert assigned["assignment_algorithm"] == algorithm
+        assert assigned["travel_minutes"] == service._route_cost(expected_route)

@@ -12,7 +12,7 @@ hourly MW deficit while strictly honoring hospital and Ramadan constraints.
 from collections import deque
 from dataclasses import dataclass
 import heapq
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Tuple
 
 from src.city_grid import FeederArea, CityGridNetwork
 
@@ -61,8 +61,6 @@ def breadth_first_search_shedding(
     queue = deque([(0, 0.0, (), 0.0)])
     visited = set()
     nodes_expanded = 0
-
-    best_overshed_solution: Optional[Tuple[List[str], float, float]] = None
 
     while queue:
         idx, current_mw, shed_ids, current_cost = queue.popleft()

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from collections import deque
 import heapq
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -38,7 +39,7 @@ class ComplaintResult:
 
 
 class MaintenanceDispatchService:
-    """Tracks 3 demo teams and compares UCS/A* routes on a fixed graph."""
+    """Tracks 3 demo teams and compares search algorithms on a fixed graph."""
 
     def __init__(self) -> None:
         self.teams: Dict[str, MaintenanceTeam] = {
@@ -50,7 +51,7 @@ class MaintenanceDispatchService:
         self._complaint_counter = 0
 
         # Direct base-to-area travel times. Other area-to-area links form a
-        # small road graph, so routes are resolved with UCS rather than lookup.
+        # small road graph, so routes are resolved with search rather than lookup.
         self.base_to_area_minutes = {
             "TEAM_A": [8, 7, 8, 9, 10, 11, 12, 14, 9, 10],
             "TEAM_B": [10, 9, 5, 6, 7, 8, 9, 11, 7, 8],
@@ -75,6 +76,45 @@ class MaintenanceDispatchService:
             graph[area_id].append((next_area, 3))
             graph[area_id].append((previous_area, 3))
         return graph
+
+    def find_route_bfs(self, team_id: str, area_id: str) -> Optional[List[str]]:
+        team = self.teams.get(team_id)
+        if team is None or area_id not in AREA_IDS:
+            return None
+
+        graph = self._build_graph()
+        frontier = deque([(team.base, [team.base])])
+        visited = {team.base}
+        while frontier:
+            node, route = frontier.popleft()
+            if node == area_id:
+                return route
+            for neighbor, _ in graph.get(node, []):
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                frontier.append((neighbor, route + [neighbor]))
+        return None
+
+    def find_route_dfs(self, team_id: str, area_id: str) -> Optional[List[str]]:
+        team = self.teams.get(team_id)
+        if team is None or area_id not in AREA_IDS:
+            return None
+
+        graph = self._build_graph()
+        frontier = [(team.base, [team.base])]
+        visited = set()
+        while frontier:
+            node, route = frontier.pop()
+            if node == area_id:
+                return route
+            if node in visited:
+                continue
+            visited.add(node)
+            for neighbor, _ in reversed(graph.get(node, [])):
+                if neighbor not in visited:
+                    frontier.append((neighbor, route + [neighbor]))
+        return None
 
     def find_route_ucs(self, team_id: str, area_id: str) -> Optional[List[str]]:
         team = self.teams.get(team_id)
@@ -110,7 +150,7 @@ class MaintenanceDispatchService:
         visited: Dict[str, int] = {}
 
         while frontier:
-            _estimated_total, cost, node, route = heapq.heappop(frontier)
+            _, cost, node, route = heapq.heappop(frontier)
             if node == area_id:
                 return route
             if node in visited and visited[node] <= cost:
@@ -172,7 +212,7 @@ class MaintenanceDispatchService:
                 continue
             route = self.find_route_ucs(team.id, area_id)
             if route:
-                available.append((self._route_cost(team.id, route), team.id))
+                available.append((self._route_cost(route), team.id))
         if not available:
             return None
         travel_minutes, team_id = min(available, key=lambda item: (item[0], item[1]))
@@ -184,26 +224,29 @@ class MaintenanceDispatchService:
             if team.status != "available":
                 continue
             team_routes = {}
-            for algorithm_name, route_method in (
-                ("UCS", self.find_route_ucs),
-                ("A*", self.find_route_astar),
+            for algorithm_key, route_method in (
+                ("bfs", self.find_route_bfs),
+                ("dfs", self.find_route_dfs),
+                ("ucs", self.find_route_ucs),
+                ("astar", self.find_route_astar),
             ):
                 route = route_method(team.id, area_id)
                 if route is not None:
-                    team_routes[algorithm_name] = {
+                    team_routes[algorithm_key] = {
                         "route": route,
-                        "travel_minutes": self._route_cost(team.id, route),
+                        "travel_minutes": self._route_cost(route),
                     }
-            ucs_minutes = team_routes.get("UCS", {}).get("travel_minutes")
-            astar_minutes = team_routes.get("A*", {}).get("travel_minutes")
+            route_minutes = [
+                route["travel_minutes"] for route in team_routes.values()
+            ]
             options.append({
                 "team_id": team.id,
                 "team_name": team.name,
-                "ucs": team_routes.get("UCS"),
-                "astar": team_routes.get("A*"),
-                "best_travel_minutes": min(
-                    minutes for minutes in (ucs_minutes, astar_minutes) if minutes is not None
-                ) if ucs_minutes is not None or astar_minutes is not None else None,
+                "bfs": team_routes.get("bfs"),
+                "dfs": team_routes.get("dfs"),
+                "ucs": team_routes.get("ucs"),
+                "astar": team_routes.get("astar"),
+                "best_travel_minutes": min(route_minutes) if route_minutes else None,
             })
 
         options.sort(
@@ -213,24 +256,25 @@ class MaintenanceDispatchService:
                 item["team_id"],
             )
         )
-        ucs_candidates = [
-            item for item in options
-            if item["ucs"] is not None
-        ]
-        astar_candidates = [
-            item for item in options
-            if item["astar"] is not None
-        ]
-        ucs_recommended_team_id = min(
-            ucs_candidates,
-            key=lambda item: (item["ucs"]["travel_minutes"], item["team_id"]),
-        )["team_id"] if ucs_candidates else None
-        astar_recommended_team_id = min(
-            astar_candidates,
-            key=lambda item: (item["astar"]["travel_minutes"], item["team_id"]),
-        )["team_id"] if astar_candidates else None
+        recommended_team_ids = {}
+        for algorithm_key in ("bfs", "dfs", "ucs", "astar"):
+            candidates = [
+                item for item in options if item[algorithm_key] is not None
+            ]
+            recommended_team_ids[algorithm_key] = min(
+                candidates,
+                key=lambda item: (
+                    item[algorithm_key]["travel_minutes"],
+                    item["team_id"],
+                ),
+            )["team_id"] if candidates else None
+
+        ucs_recommended_team_id = recommended_team_ids["ucs"]
+        astar_recommended_team_id = recommended_team_ids["astar"]
         return {
             "recommended_team_id": ucs_recommended_team_id,
+            "bfs_recommended_team_id": recommended_team_ids["bfs"],
+            "dfs_recommended_team_id": recommended_team_ids["dfs"],
             "ucs_recommended_team_id": ucs_recommended_team_id,
             "astar_recommended_team_id": astar_recommended_team_id,
             "options": options,
@@ -251,11 +295,20 @@ class MaintenanceDispatchService:
         if team.status != "available":
             return None
 
-        route_method = self.find_route_astar if algorithm.upper() in ("A*", "ASTAR") else self.find_route_ucs
+        normalized_algorithm = str(algorithm).strip().upper()
+        if normalized_algorithm in ("A*", "ASTAR"):
+            normalized_algorithm = "A*"
+        route_methods = {
+            "BFS": self.find_route_bfs,
+            "DFS": self.find_route_dfs,
+            "UCS": self.find_route_ucs,
+            "A*": self.find_route_astar,
+        }
+        route_method = route_methods.get(normalized_algorithm, self.find_route_ucs)
         route = route_method(team_id, complaint["area_id"])
         if route is None:
             return None
-        travel_minutes = self._route_cost(team_id, route)
+        travel_minutes = self._route_cost(route)
         team.status = "busy"
         team.assigned_area_id = complaint["area_id"]
         team.assigned_complaint_id = complaint_id
@@ -264,10 +317,12 @@ class MaintenanceDispatchService:
         complaint["accepted"] = True
         complaint["team_id"] = team_id
         complaint["travel_minutes"] = travel_minutes
-        complaint["assignment_algorithm"] = "A*" if algorithm.upper() in ("A*", "ASTAR") else "UCS"
+        complaint["assignment_algorithm"] = (
+            normalized_algorithm if normalized_algorithm in route_methods else "UCS"
+        )
         return complaint
 
-    def _route_cost(self, team_id: str, route: Iterable[str]) -> int:
+    def _route_cost(self, route: Iterable[str]) -> int:
         nodes = list(route)
         graph = self._build_graph()
         total = 0

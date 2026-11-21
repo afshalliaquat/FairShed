@@ -1,8 +1,6 @@
 """Unit tests for Smart Grid Agents and Environment (Task 1)."""
 
-import pytest
-import numpy as np
-from src.city_grid import CityGridNetwork, get_default_city_feeders
+from src.city_grid import CityGridNetwork
 from src.agent_environment import (
     GridEnvironment,
     PEASSpecification,
@@ -38,7 +36,7 @@ def test_grid_environment_percept_and_action():
     # Ensure hospital is NOT shed
     assert "F01_HOSP" not in action.shed_area_ids
 
-    penalty, violations = env.execute_action(action, percept.area_demands)
+    _, violations = env.execute_action(action, percept.area_demands)
     assert len(violations) == 0  # Hospital and Ramadan honored
 
 

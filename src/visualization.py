@@ -20,10 +20,8 @@ import matplotlib
 matplotlib.use("Agg")  # Non-interactive backend for headless figure generation
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 from src.city_grid import FeederArea
-from src.fairness_metrics import ScheduleFairnessReport
 
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "reports" / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)

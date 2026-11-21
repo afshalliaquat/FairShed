@@ -13,7 +13,6 @@ Demonstrates the proper working of ALL tasks without advanced library usage:
 
 import os
 import sys
-import time
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -35,7 +34,7 @@ _CACHE_DIR = BASE_DIR / ".matplotlib_cache"
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["MPLCONFIGDIR"] = str(_CACHE_DIR)
 
-from src.city_grid import CityGridNetwork, get_default_city_feeders
+from src.city_grid import CityGridNetwork
 from src.agent_environment import (
     PEASSpecification,
     EnvironmentProperty,

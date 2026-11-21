@@ -25,7 +25,7 @@ def test_generate_synthetic_energy_data_structure():
 
 def test_load_or_create_dataset_fallback(tmp_path):
     test_csv = tmp_path / "test_energy.csv"
-    df, status_msg = load_or_create_dataset(output_path=test_csv, prefer_public=False)
+    df, _ = load_or_create_dataset(output_path=test_csv, prefer_public=False)
 
     assert test_csv.exists()
     assert isinstance(df, pd.DataFrame)

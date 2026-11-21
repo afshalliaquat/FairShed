@@ -178,11 +178,6 @@
           <span>Scenario Simulator</span>
         </button>
 
-        <button id="nav-experiments" onclick="switchTab('experiments')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
-          <i class="fa-solid fa-flask w-4 text-center"></i>
-          <span>AI Lab Syllabus Tasks</span>
-        </button>
-
         <button id="nav-settings" onclick="switchTab('settings')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
           <i class="fa-solid fa-gear w-4 text-center"></i>
           <span>Settings</span>
@@ -1092,57 +1087,6 @@
         </div>
       </div>
 
-      <!-- ==================== TAB 8: AI LAB EXPERIMENTS SHOWCASE ==================== -->
-      <div id="view-experiments" class="space-y-6 tab-view hidden">
-        <div class="glass-card p-6">
-          <div class="flex items-center justify-between mb-5">
-            <div>
-              <h2 class="text-xl font-bold text-slate-800">AI Laboratory Tasks & Syllabus Benchmark</h2>
-              <p class="text-xs text-slate-500 mt-1">Supervised demand forecasting with Random Forest and Linear Regression.</p>
-            </div>
-            <button onclick="switchTab('dashboard')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
-              <div class="flex items-center justify-between mb-2">
-                <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-magnifying-glass text-indigo-600 mr-2"></i>Tasks 2 & 3: Uninformed vs Informed Search</h4>
-                <button onclick="runExperimentAPI('search')" class="text-[11px] px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded">Run Live</button>
-              </div>
-              <p class="text-xs text-slate-600 mb-3">Comparing BFS, DFS, UCS, Greedy Best-First, and A* for feeder shedding subset selection at peak deficit.</p>
-              <div id="expSearchResults" class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
-                <div>• BFS   : 4 nodes expanded | 2 feeders shed | Cost: 600.0</div>
-                <div>• UCS   : 59 nodes expanded | 2 feeders shed | Cost: 250.0 (Optimal)</div>
-                <div>• A*    : 37 nodes expanded | 2 feeders shed | Cost: 250.0 (Provably Optimal)</div>
-              </div>
-            </div>
-
-            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
-              <h4 class="text-sm font-bold text-slate-800 mb-2"><i class="fa-solid fa-brain text-purple-600 mr-2"></i>Task 7: Supervised Regression</h4>
-              <p class="text-xs text-slate-600 mb-3">Random Forest Regressor compared with Linear Regression.</p>
-              <div class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
-                <div>• Random Forest: MAE = 241.6 MW | R² = 0.9509 | MAPE = 1.61%</div>
-                <div>• Linear Regression: MAE = 266.1 MW | R² = 0.9406</div>
-              </div>
-            </div>
-
-            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
-              <div class="flex items-center justify-between mb-2">
-                <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-network-wired text-amber-600 mr-2"></i>Task 8 & 9: K-Means & Q-Learning</h4>
-                <button onclick="runExperimentAPI('kmeans')" class="text-[11px] px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded">Cluster Feeders</button>
-              </div>
-              <p class="text-xs text-slate-600 mb-3">Unsupervised Lloyd's clustering for feeder archetypes & Q-learning agent dispatching load shedding.</p>
-              <div id="expKmeansResults" class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
-                <div>• K-Means: 4 Clusters (Hospital Exempt, Industrial, Urban, Rural)</div>
-                <div>• Q-Learning: 44 state-action pairs | ε decayed to 0.05</div>
-                <div>• Policy: Zero hospital violations, balanced residential outages</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ==================== TAB 9: SETTINGS ==================== -->
       <div id="view-settings" class="space-y-6 tab-view hidden">
         <div class="glass-card p-6 max-w-2xl">
           <h2 class="text-xl font-bold text-slate-800 mb-4">⚙️ FairShed System Settings</h2>
@@ -1186,6 +1130,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

@@ -1,6 +1,5 @@
 """Unit tests for Uninformed and Informed Searching Algorithms (Tasks 2 & 3)."""
 
-import pytest
 from src.city_grid import CityGridNetwork
 from src.uninformed_search import (
     breadth_first_search_shedding,

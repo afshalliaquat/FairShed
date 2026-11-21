@@ -1,7 +1,7 @@
 /**
  * FairShed - Full-Featured Modern Web Application Logic
  * Integrates 10-Area Grid, Supervised Regression, CSP/Hill Climbing Scheduler,
- * Complete Historical EDA, AI Lab Syllabus Suite & Interactive Scenario Simulator.
+ * Complete Historical EDA & Interactive Scenario Simulator.
  */
 
 // ============================================================================
@@ -1182,21 +1182,22 @@ function renderComplaintMaintenanceTab(teams, complaints = []) {
       const availableTeams = teams.filter((team) => team.status === "available");
       const selectedTeam = maintenanceSelectedTeam[complaint.id];
       const selectedAlgorithm = maintenanceSelectedAlgorithm[complaint.id] || "UCS";
+      const algorithmKey = selectedAlgorithm === "A*" ? "astar" : selectedAlgorithm.toLowerCase();
       const options = availableTeams.map((team) => {
         const option = dispatch.options.find((item) => item.team_id === team.id);
-        const algorithmRoute = selectedAlgorithm === "A*" ? option?.astar : option?.ucs;
+        const algorithmRoute = option?.[algorithmKey];
         const minutes = algorithmRoute?.travel_minutes;
-        const recommendedTeamId = selectedAlgorithm === "A*"
-          ? dispatch.astar_recommended_team_id
-          : dispatch.ucs_recommended_team_id;
+        const recommendedTeamId = dispatch[`${algorithmKey}_recommended_team_id`];
         const recommended = team.id === recommendedTeamId ? " - Recommended" : "";
         return `<option value="${team.id}">${team.name}${minutes != null ? ` - ${minutes} min` : ""}${recommended}</option>`;
       }).join("");
       const routeOptions = (dispatch.options || []).map((teamOption) => {
+        const bfs = teamOption.bfs ? `${teamOption.bfs.travel_minutes} min` : "Unavailable";
+        const dfs = teamOption.dfs ? `${teamOption.dfs.travel_minutes} min` : "Unavailable";
         const ucs = teamOption.ucs ? `${teamOption.ucs.travel_minutes} min` : "Unavailable";
         const astar = teamOption.astar ? `${teamOption.astar.travel_minutes} min` : "Unavailable";
         return `<div class="text-xs text-slate-600">
-          <strong>${teamOption.team_id}</strong>: UCS ${ucs} | A* ${astar}
+          <strong>${teamOption.team_id}</strong>: BFS ${bfs} | DFS ${dfs} | UCS ${ucs} | A* ${astar}
         </div>`;
       }).join("");
       return `<div class="p-4 bg-white border border-slate-200 rounded-xl">
@@ -1209,7 +1210,7 @@ function renderComplaintMaintenanceTab(teams, complaints = []) {
           <div class="p-3 bg-slate-50 rounded-lg">
             <label class="block text-xs font-bold text-slate-700 mb-1" for="teamFor_${complaint.id}">Assign team</label>
             ${availableTeams.length ? `<select id="teamFor_${complaint.id}" class="w-full text-xs p-2 border border-slate-300 rounded mb-2" onchange="updateMaintenanceEstimate('${complaint.id}')">${options}</select>
-            <select id="algorithmFor_${complaint.id}" class="w-full text-xs p-2 border border-slate-300 rounded mb-2" onchange="updateMaintenanceEstimate('${complaint.id}')"><option value="UCS" ${selectedAlgorithm === "UCS" ? "selected" : ""}>UCS - Lowest-cost route</option><option value="A*" ${selectedAlgorithm === "A*" ? "selected" : ""}>A* - Heuristic route</option></select>
+            <select id="algorithmFor_${complaint.id}" class="w-full text-xs p-2 border border-slate-300 rounded mb-2" onchange="updateMaintenanceEstimate('${complaint.id}')"><option value="BFS" ${selectedAlgorithm === "BFS" ? "selected" : ""}>BFS - Fewest road segments</option><option value="DFS" ${selectedAlgorithm === "DFS" ? "selected" : ""}>DFS - Depth-first route</option><option value="UCS" ${selectedAlgorithm === "UCS" ? "selected" : ""}>UCS - Lowest travel-time cost</option><option value="A*" ${selectedAlgorithm === "A*" ? "selected" : ""}>A* - Lowest travel-time cost (h=0)</option></select>
             <div id="estimateFor_${complaint.id}" class="p-2 mb-2 rounded-lg bg-white border border-slate-200 text-xs text-slate-700"></div>
             <button type="button" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold" onclick="assignMaintenanceTeam('${complaint.id}')">Accept & assign team</button>`
               : '<p class="text-xs text-amber-700">A team can be assigned after a repair is marked complete.</p>'}
@@ -1251,13 +1252,13 @@ function updateMaintenanceEstimate(complaintId) {
   maintenanceSelectedAlgorithm[complaintId] = algorithmSelect.value;
 
   const dispatch = maintenanceDispatchOptions[complaintId] || { options: [] };
-  const recommendedTeamId = algorithmSelect.value === "A*"
-    ? dispatch.astar_recommended_team_id
-    : dispatch.ucs_recommended_team_id;
+  const algorithm = algorithmSelect.value;
+  const algorithmKey = algorithm === "A*" ? "astar" : algorithm.toLowerCase();
+  const recommendedTeamId = dispatch[`${algorithmKey}_recommended_team_id`];
 
   Array.from(teamSelect.options).forEach((option) => {
     const teamOption = dispatch.options.find((item) => item.team_id === option.value);
-    const routeOption = algorithmSelect.value === "A*" ? teamOption?.astar : teamOption?.ucs;
+    const routeOption = teamOption?.[algorithmKey];
     const minutes = routeOption?.travel_minutes;
     const teamName = teamOption?.team_name || option.value;
     const recommended = option.value === recommendedTeamId ? " - Recommended" : "";
@@ -1270,8 +1271,7 @@ function updateMaintenanceEstimate(complaintId) {
     return;
   }
 
-  const algorithm = algorithmSelect.value;
-  const routeOption = algorithm === "A*" ? teamOption.astar : teamOption.ucs;
+  const routeOption = teamOption[algorithmKey];
   if (!routeOption) {
     estimateBox.textContent = "Selected route is unavailable.";
     return;
@@ -1813,38 +1813,7 @@ async function updateScenarioPrediction() {
 }
 
 // ============================================================================
-// 11. AI LAB SYLLABUS TASKS & ALGORITHM DEMOS
-// ============================================================================
-async function runExperimentAPI(type) {
-  try {
-    const res = await fetch("/api/run-experiment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type })
-    });
-    if (!res.ok) {
-      throw new Error(`Experiment request failed (${res.status}).`);
-    }
-
-    const data = await res.json();
-    if (type === "search") {
-      const el = document.getElementById("expSearchResults");
-      if (el && data.results) {
-        el.innerHTML = data.results.map(r => `<div>• ${r.algo.padEnd(28, ' ')}: ${r.nodes} nodes | Cost: ${r.cost}</div>`).join("");
-      }
-    } else if (type === "kmeans") {
-      const el = document.getElementById("expKmeansResults");
-      if (el && data.profiles) {
-        el.innerHTML = data.profiles.slice(0, 5).map(p => `<div>• ${p.name}: ${p.base_load_mw}MW &rarr; Archetype: [${p.profile_archetype}]</div>`).join("");
-      }
-    }
-  } catch (err) {
-    console.error("Experiment request failed:", err);
-  }
-}
-
-// ============================================================================
-// 12. GLOBAL EVENT LISTENERS & SEARCH FILTER
+// 11. GLOBAL EVENT LISTENERS & SEARCH FILTER
 // ============================================================================
 function setupEventListeners() {
   // Theme Toggle

@@ -2,7 +2,7 @@
 
 > **Project 24 | High Difficulty**  
 > **Core AI Techniques**: Supervised Regression, Bayesian Networks, Markov Models, Constraint Satisfaction Problems (CSP), Hill Climbing & Local Search, Heuristic Search ($A^*$), Evolutionary Algorithms, Unsupervised Clustering, and Reinforcement Learning (Q-Learning).
-> **Tools & Libraries**: Pure Python (zero external optimization/search libraries), NumPy, Pandas, Scikit-learn, Matplotlib, Plotly.
+> **Tools & Libraries**: Pure Python (zero external optimization/search libraries), NumPy, Pandas, Scikit-learn, Matplotlib.
 
 ---
 

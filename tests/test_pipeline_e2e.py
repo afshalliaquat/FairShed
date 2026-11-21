@@ -1,7 +1,6 @@
 """Integration tests for the complete forecasting pipeline."""
 
 import json
-from pathlib import Path
 from src.pipeline import run_pipeline, METRICS_JSON_PATH, FIGURES_DIR
 
 

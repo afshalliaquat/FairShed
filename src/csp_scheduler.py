@@ -19,9 +19,9 @@ Algorithms implemented from scratch:
 - Forward Checking for early constraint violation pruning.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import time
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List
 import numpy as np
 
 from src.city_grid import FeederArea, CityGridNetwork
@@ -172,7 +172,6 @@ class FairLoadSheddingCSP:
 
         # Solve hour by hour sequentially using CSP search at each deficit hour
         # This keeps the search tractable and simulates the real operational dispatch pipeline
-        success = True
         for h in range(self.hours):
             shortfall_h = self.hourly_shortfall[h]
             if shortfall_h <= self.shortfall_tolerance:
@@ -188,7 +187,6 @@ class FairLoadSheddingCSP:
                 # Time limit reached, complete with repair
                 for rem_h in range(h + 1, self.hours):
                     self._greedy_repair_hour(schedule, rem_h)
-                success = False
                 break
 
         runtime = time.perf_counter() - start_time

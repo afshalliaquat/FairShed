@@ -9,10 +9,10 @@ Implements a Markov Decision Process (MDP) and Tabular Q-Learning Agent from scr
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 import numpy as np
 
-from src.city_grid import FeederArea, CityGridNetwork
+from src.city_grid import CityGridNetwork
 
 
 @dataclass
@@ -144,7 +144,7 @@ class TabularQGridAgent:
         """Trains the Q-learning agent across simulation days."""
         episode_rewards = []
 
-        for ep in range(num_episodes):
+        for _ in range(num_episodes):
             total_ep_reward = 0.0
             cumulative_outages = {f.area_id: 0 for f in self.feeders}
 
