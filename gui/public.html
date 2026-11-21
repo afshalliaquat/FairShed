@@ -110,7 +110,31 @@
         <div id="publicScheduleBody" class="space-y-2 mt-4"></div>
       </div>
     </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="public-panel">
+        <div class="flex items-center gap-3 mb-3">
+          <span class="public-tool-icon bg-rose-100 text-rose-600"><i class="fa-solid fa-triangle-exclamation"></i></span>
+          <div><p class="public-eyebrow text-rose-600">Customer report</p><h2 class="font-bold">Report an unexpected outage</h2></div>
+        </div>
+        <form id="publicComplaintForm" class="space-y-3">
+          <div>
+            <label class="text-xs font-bold text-slate-600" for="complaintArea">Affected area</label>
+            <select id="complaintArea" class="public-select w-full mt-1" required></select>
+          </div>
+          <button type="submit" class="public-query-button w-full">Submit outage complaint</button>
+        </form>
+        <div id="publicComplaintResult" class="public-query-answer mt-3">Select an area and submit if electricity went out unexpectedly.</div>
+      </div>
+      <div class="public-panel">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <div><p class="public-eyebrow text-indigo-600">Maintenance dispatch</p><h2 class="font-bold">Team availability</h2></div>
+          <i class="fa-solid fa-screwdriver-wrench text-indigo-500"></i>
+        </div>
+        <div id="publicMaintenanceTeams" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+      </div>
+    </section>
   </main>
-  <script src="public.js?v=7"></script>
+  <script src="public.js?v=8"></script>
 </body>
 </html>

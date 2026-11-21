@@ -6,7 +6,6 @@ Demonstrates the proper working of ALL tasks without advanced library usage:
 - Task 3 (Lab 4): Informed Searching Algorithms (Greedy Best-First, A*)
 - Task 4 (Lab 5): Constraint Satisfaction Problems (CSP Backtracking with MRV)
 - Task 5 (Lab 6): Local (Hill Climbing) & Evolutionary (Genetic Algorithm) Search
-- Task 6 (Lab 7): Dynamic Bayesian Networks, HMM (Viterbi), Kalman Filter (State Estimation)
 - Task 7 (Lab 9): Supervised Learning (Linear Regression & Random Forest)
 - Task 8 (Lab 10): Unsupervised Learning (Scratch K-Means Feeder Profiling)
 - Lab 11: Reinforcement Learning (Tabular Q-Learning Grid Dispatch)
@@ -61,10 +60,6 @@ from src.local_evolutionary_search import (
     HillClimbingScheduler,
     GeneticAlgorithmScheduler,
 )
-from src.probabilistic_temporal import (
-    PowerGridKalmanFilter,
-    GridStateHMM,
-)
 from src.models import chronological_split, train_linear_regression, train_random_forest
 from src.evaluate import evaluate_all_models
 from src.unsupervised_learning import cluster_city_feeders
@@ -74,7 +69,6 @@ from src.visualization import (
     plot_fairness_outage_chart,
     plot_load_shedding_heatmap,
     plot_demand_shortfall_dispatch,
-    plot_kalman_denoising,
 )
 from src.data_loader import load_or_create_dataset
 from src.data_cleaner import clean_energy_data
@@ -239,31 +233,13 @@ def run_all_labs_showcase():
         is_ramadan=True,
     )
     hc_solver = HillClimbingScheduler(evaluator, seed=42)
-    hc_res = hc_solver.solve_random_restart(num_restarts=4, iterations_per_restart=50)
+    hc_res = hc_solver.solve_steepest_ascent(max_iterations=150)
 
     ga_solver = GeneticAlgorithmScheduler(evaluator, population_size=25, seed=42)
     ga_res = ga_solver.solve(generations=30)
 
-    print(f"Hill Climbing: Runtime {hc_res.runtime_seconds:.2f}s | Final Loss: {hc_res.best_score:.1f} | Violations: {len(hc_res.violations)}")
+    print(f"Steepest-Ascent Hill Climbing: Runtime {hc_res.runtime_seconds:.2f}s | Final Loss: {hc_res.best_score:.1f} | Violations: {len(hc_res.violations)}")
     print(f"Genetic Algo : Runtime {ga_res.runtime_seconds:.2f}s | Final Loss: {ga_res.best_score:.1f} | Violations: {len(ga_res.violations)}")
-
-    # -------------------------------------------------------------------------
-    # TASK 6: Dynamic Bayesian Networks, HMM & Kalman Filter
-    # -------------------------------------------------------------------------
-    print_banner("Probabilistic Temporal Models: Kalman Filter & HMM", "Task 6 (Week 8 / Lab 7)")
-    # 1. Kalman Filter
-    kf = PowerGridKalmanFilter(measurement_noise_r=10000.0)
-    noisy_loads = hourly_demands + np.random.normal(0, 100.0, size=len(hourly_demands))
-    kf_diag = kf.filter_sequence(noisy_loads, ground_truth=hourly_demands)
-    print(f"Kalman Filter Denoising: Raw RMSE = {kf_diag.raw_rmse:.2f} MW -> Filtered RMSE = {kf_diag.filtered_rmse:.2f} MW")
-    print(f"Noise Reduction Rate: {kf_diag.noise_reduction_percentage:.1f}%")
-
-    # 2. HMM
-    hmm = GridStateHMM()
-    obs_seq = hmm.discretize_observations(hourly_demands)
-    hmm_res = hmm.viterbi_decode(obs_seq)
-    print(f"HMM Grid Stress Decoding (Viterbi) Log-Likelihood: {hmm_res.log_likelihood:.2f}")
-    print(f"Decoded States Snapshot (first 6 hours): {hmm_res.decoded_state_labels[:6]}")
 
     # -------------------------------------------------------------------------
     # TASK 7: Supervised Learning (Linear Regression & Random Forest)
@@ -326,15 +302,12 @@ def run_all_labs_showcase():
     f3 = plot_demand_shortfall_dispatch(
         np.arange(24), hourly_demands, hourly_capacities, hourly_shortfalls, csp_res.hourly_shed_mw
     )
-    f4 = plot_kalman_denoising(kf_diag.raw_noisy_measurements, kf_diag.filtered_estimates, hourly_demands)
-
     print(f"  [OK] Saved Fairness Bar Chart        -> {f1}")
     print(f"  [OK] Saved Schedule Heatmap          -> {f2}")
     print(f"  [OK] Saved Power Balance Curve       -> {f3}")
-    print(f"  [OK] Saved Kalman Denoising Plot     -> {f4}")
 
     print("\n" + "=" * 80)
-    print(">>> ALL AI LAB TASKS EXECUTED, VERIFIED, AND BENCHMARKED SUCCESSFULLY!")
+    print(">>> RETAINED AI LAB TASKS EXECUTED, VERIFIED, AND BENCHMARKED SUCCESSFULLY!")
     print("=" * 80)
 
 

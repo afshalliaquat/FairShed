@@ -5,7 +5,7 @@ standard library HTTP server. Provides complete REST API endpoints powering:
 1. EDA & Time Series Filtering
 2. Next-Day Demand Forecasting (Random Forest, Linear Regression)
 3. Live Fair Load-Shedding Scheduler (CSP Backtracking, Hill Climbing, Genetic Algorithm, Q-Learning)
-4. AI Syllabus Experiments (Search BFS/DFS/A*, Kalman Filter, HMM Viterbi, K-Means)
+4. AI Syllabus Experiments (Search BFS/DFS/A*, K-Means)
 5. Interactive What-If Scenario Simulator
 """
 
@@ -16,8 +16,10 @@ import os
 import secrets
 import sys
 import webbrowser
+from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from typing import Optional
 from urllib.parse import parse_qs, urlparse
 import joblib
 import numpy as np
@@ -32,10 +34,15 @@ from src.city_grid import CityGridNetwork, get_default_city_feeders
 from src.csp_scheduler import FairLoadSheddingCSP
 from src.local_evolutionary_search import ScheduleEvaluator, HillClimbingScheduler, GeneticAlgorithmScheduler
 from src.fairness_metrics import evaluate_schedule_fairness
+from src.probabilistic_scheduler import (
+    ProbabilisticShortfallForecast,
+    ProbabilisticShortfallModel,
+    SHORTFALL_STATE_NAMES,
+)
 from src.uninformed_search import breadth_first_search_shedding, depth_first_search_shedding, uniform_cost_search_shedding
 from src.informed_search import greedy_best_first_search_shedding, a_star_search_shedding
-from src.probabilistic_temporal import PowerGridKalmanFilter, GridStateHMM
 from src.unsupervised_learning import cluster_city_feeders
+from src.maintenance_dispatch import MaintenanceDispatchService
 
 GUI_DIR = BASE_DIR / "gui"
 DATA_PATH = BASE_DIR / "data" / "processed" / "energy_features.csv"
@@ -45,7 +52,10 @@ PORT = 8000
 # Cache loaded data and models
 _CACHED_DF = None
 _CACHED_MODELS = {}
+_CACHED_PROBABILISTIC_MODEL: Optional[ProbabilisticShortfallModel] = None
 _ADMIN_SESSIONS = set()
+_PUBLIC_STATUS_CACHE = None
+_MAINTENANCE_SERVICE = MaintenanceDispatchService()
 ADMIN_USERNAME = os.environ.get("FAIRSHED_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("FAIRSHED_ADMIN_PASSWORD", "admin123")
 
@@ -77,6 +87,29 @@ def get_cached_models():
             print("Warning: Could not load saved models:", e)
             _CACHED_MODELS = {"models": {}, "cols": []}
     return _CACHED_MODELS
+
+
+def get_cached_probabilistic_model():
+    global _CACHED_PROBABILISTIC_MODEL
+    if _CACHED_PROBABILISTIC_MODEL is None:
+        model = ProbabilisticShortfallModel()
+        model.fit(get_cached_df(), CityGridNetwork())
+        _CACHED_PROBABILISTIC_MODEL = model
+    return _CACHED_PROBABILISTIC_MODEL
+
+
+def forecast_probabilistic_shortfall(
+    demands: np.ndarray,
+    temperatures: np.ndarray,
+    capacities: np.ndarray,
+    hours: np.ndarray,
+) -> ProbabilisticShortfallForecast:
+    return get_cached_probabilistic_model().predict(
+        demands,
+        temperatures,
+        capacities,
+        hours,
+    )
 
 
 def build_next_day_forecast():
@@ -183,42 +216,58 @@ class FairShedHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        global _PUBLIC_STATUS_CACHE
 
         if parsed.path == "/api/public-status":
             grid = CityGridNetwork(is_ramadan=True)
-            demands = np.array(
-                get_cached_df().tail(24)["energy_consumption_mw"].values,
-                dtype=float,
-            )
+            sample_day = get_cached_df().tail(24).copy().reset_index(drop=True)
+            demands = sample_day["energy_consumption_mw"].to_numpy(dtype=float)
+            temperatures = sample_day["temperature_c"].to_numpy(dtype=float)
+            hours = sample_day["timestamp"].dt.hour.to_numpy(dtype=int)
             capacities = grid.simulate_generation_capacity(
                 demands,
                 average_shortfall_ratio=0.18,
                 seed=42,
             )
-            shortfalls = grid.calculate_shortfall(demands, capacities)
+            try:
+                probabilistic_forecast = forecast_probabilistic_shortfall(
+                    demands,
+                    temperatures,
+                    capacities,
+                    hours,
+                )
+            except (RuntimeError, ValueError) as error:
+                self._send_json(
+                    {"error": f"Probabilistic shortfall model unavailable: {error}"},
+                    status=503,
+                )
+                return
+            shortfalls = probabilistic_forecast.expected_shortfall_mw
             area_demands = grid.calculate_hourly_area_demands(demands)
             result = FairLoadSheddingCSP(
                 grid,
                 shortfalls,
                 area_demands,
             ).solve()
-            self._send_json(
-                {
-                    "updated_at": pd.Timestamp.now().isoformat(),
-                    "hours": [f"{hour:02d}:00" for hour in range(24)],
-                    "feeders": [
-                        {
-                            "id": feeder.area_id,
-                            "name": feeder.name,
-                            "category": feeder.category,
-                            "exempt": feeder.is_critical_exempt,
-                            "outage_hours": int(result.area_outage_hours.get(feeder.area_id, 0)),
-                        }
-                        for feeder in grid.feeders
-                    ],
-                    "schedule_matrix": result.schedule_matrix.tolist(),
-                }
-            )
+            public_status = {
+                "updated_at": pd.Timestamp.now().isoformat(),
+                "hours": [f"{hour:02d}:00" for hour in range(24)],
+                "feeders": [
+                    {
+                        "id": feeder.area_id,
+                        "name": feeder.name,
+                        "category": feeder.category,
+                        "exempt": feeder.is_critical_exempt,
+                        "outage_hours": int(result.area_outage_hours.get(feeder.area_id, 0)),
+                    }
+                    for feeder in grid.feeders
+                ],
+                "schedule_matrix": result.schedule_matrix.tolist(),
+                "risk_summary": probabilistic_forecast.summary(),
+                "maintenance": _MAINTENANCE_SERVICE.status(),
+            }
+            _PUBLIC_STATUS_CACHE = public_status
+            self._send_json(public_status)
             return
 
         if parsed.path.startswith("/api/") and parsed.path != "/api/auth-status":
@@ -234,17 +283,35 @@ class FairShedHandler(SimpleHTTPRequestHandler):
             df = get_cached_df()
             feeders = get_default_city_feeders()
             sample_day = df.tail(24).copy().reset_index(drop=True)
-            demands = sample_day["energy_consumption_mw"].values.tolist()
+            demands = sample_day["energy_consumption_mw"].to_numpy(dtype=float)
 
             grid = CityGridNetwork(is_ramadan=True)
-            caps = grid.simulate_generation_capacity(np.array(demands), average_shortfall_ratio=0.18, seed=42).tolist()
-            shortfalls = np.maximum(0, np.array(demands) - np.array(caps)).tolist()
+            capacities = grid.simulate_generation_capacity(
+                demands,
+                average_shortfall_ratio=0.18,
+                seed=42,
+            )
+            actual_shortfalls = grid.calculate_shortfall(demands, capacities)
+            try:
+                probabilistic_forecast = forecast_probabilistic_shortfall(
+                    demands,
+                    sample_day["temperature_c"].to_numpy(dtype=float),
+                    capacities,
+                    sample_day["timestamp"].dt.hour.to_numpy(dtype=int),
+                )
+            except (RuntimeError, ValueError) as error:
+                self._send_json(
+                    {"error": f"Probabilistic shortfall model unavailable: {error}"},
+                    status=503,
+                )
+                return
+            shortfalls = probabilistic_forecast.expected_shortfall_mw
 
             # Pre-compute initial CSP schedule
-            area_demands = grid.calculate_hourly_area_demands(np.array(demands))
-            csp_solver = FairLoadSheddingCSP(grid, np.array(shortfalls), area_demands)
+            area_demands = grid.calculate_hourly_area_demands(demands)
+            csp_solver = FairLoadSheddingCSP(grid, shortfalls, area_demands)
             csp_res = csp_solver.solve()
-            report = evaluate_schedule_fairness("CSP Backtracking", csp_res.schedule_matrix, grid.feeders, np.array(shortfalls), area_demands)
+            report = evaluate_schedule_fairness("CSP Backtracking", csp_res.schedule_matrix, grid.feeders, shortfalls, area_demands)
 
             data = {
                 "total_records": len(df),
@@ -267,11 +334,17 @@ class FairShedHandler(SimpleHTTPRequestHandler):
                     for f in feeders
                 ],
                 "hours_24": [f"{h:02d}:00" for h in range(24)],
-                "demands_24h": demands,
-                "capacities_24h": caps,
-                "shortfalls_24h": shortfalls,
+                "demands_24h": demands.tolist(),
+                "capacities_24h": capacities.tolist(),
+                "shortfalls_24h": shortfalls.tolist(),
+                "actual_shortfalls_24h": actual_shortfalls.tolist(),
+                "hourly_shed_24h": csp_res.hourly_shed_mw.tolist(),
+                "shortfall_state_names": list(SHORTFALL_STATE_NAMES),
+                "shortfall_state_probabilities": probabilistic_forecast.state_probabilities.tolist(),
+                "markov_prior_probabilities": probabilistic_forecast.markov_prior_probabilities.tolist(),
                 "csp_schedule": csp_res.schedule_matrix.tolist(),
                 "fairness_report": report.to_dict(),
+                "risk_summary": probabilistic_forecast.summary(),
             }
             self._send_json(data)
             return
@@ -331,6 +404,122 @@ class FairShedHandler(SimpleHTTPRequestHandler):
             self.wfile.write(b'{"authenticated": false}')
             return
 
+        # Public customer complaints: no administrator login is required.
+        if parsed.path == "/api/complaints":
+            area_id = str(params.get("area_id", "") or "").strip()
+            hour = int(params.get("hour", datetime.now().hour))
+
+            global _PUBLIC_STATUS_CACHE
+            if _PUBLIC_STATUS_CACHE is None:
+                df = get_cached_df()
+                sample_day = df.tail(24).copy().reset_index(drop=True)
+                demands = sample_day["energy_consumption_mw"].to_numpy(dtype=float)
+                temperatures = sample_day["temperature_c"].to_numpy(dtype=float)
+                hours = sample_day["timestamp"].dt.hour.to_numpy(dtype=int)
+                grid = CityGridNetwork(is_ramadan=True)
+                capacities = grid.simulate_generation_capacity(demands, average_shortfall_ratio=0.18, seed=42)
+                forecast = forecast_probabilistic_shortfall(demands, temperatures, capacities, hours)
+                area_demands = grid.calculate_hourly_area_demands(demands)
+                result = FairLoadSheddingCSP(grid, forecast.expected_shortfall_mw, area_demands).solve()
+                _PUBLIC_STATUS_CACHE = {
+                    "feeders": [{"id": feeder.area_id} for feeder in grid.feeders],
+                    "schedule_matrix": result.schedule_matrix.tolist(),
+                }
+
+            scheduled_off = False
+            for index, feeder in enumerate(_PUBLIC_STATUS_CACHE["feeders"]):
+                if feeder["id"] == area_id:
+                    scheduled_off = bool(_PUBLIC_STATUS_CACHE["schedule_matrix"][index][hour % 24])
+                    break
+
+            result = _MAINTENANCE_SERVICE.submit_complaint(
+                area_id=area_id,
+                hour=hour % 24,
+                scheduled_off=scheduled_off,
+            )
+            if _PUBLIC_STATUS_CACHE is not None:
+                _PUBLIC_STATUS_CACHE["maintenance"] = _MAINTENANCE_SERVICE.status()
+            status_code = 200 if result.accepted else 409
+            self._send_json(
+                {
+                    "complaint_id": result.complaint_id,
+                    "accepted": result.accepted,
+                    "status": result.status,
+                    "area_id": result.area_id,
+                    "hour": result.hour,
+                    "assigned_team_id": result.assigned_team_id,
+                    "travel_minutes": result.travel_minutes,
+                    "message": result.message,
+                    "maintenance": _MAINTENANCE_SERVICE.status(),
+                },
+                status=status_code,
+            )
+            return
+
+        if parsed.path == "/api/maintenance/complete":
+            if not self._require_authentication():
+                return
+            team_id = str(params.get("team_id", "") or "").strip()
+            completed = _MAINTENANCE_SERVICE.complete_team(team_id)
+            if _PUBLIC_STATUS_CACHE is not None:
+                _PUBLIC_STATUS_CACHE["maintenance"] = _MAINTENANCE_SERVICE.status()
+            self._send_json(
+                {
+                    "completed": completed,
+                    "team_id": team_id,
+                    "maintenance": _MAINTENANCE_SERVICE.status(),
+                },
+                status=200 if completed else 404,
+            )
+            return
+
+        if parsed.path == "/api/maintenance/assign":
+            if not self._require_authentication():
+                return
+            complaint_id = str(params.get("complaint_id", "") or "").strip()
+            team_id = str(params.get("team_id", "") or "").strip()
+            algorithm = str(params.get("algorithm", "UCS") or "UCS").strip()
+            assigned = _MAINTENANCE_SERVICE.assign_complaint(complaint_id, team_id, algorithm)
+            if _PUBLIC_STATUS_CACHE is not None:
+                _PUBLIC_STATUS_CACHE["maintenance"] = _MAINTENANCE_SERVICE.status()
+            self._send_json(
+                {
+                    "assigned": assigned is not None,
+                    "complaint": assigned,
+                    "maintenance": _MAINTENANCE_SERVICE.status(),
+                },
+                status=200 if assigned is not None else 409,
+            )
+            return
+
+        if parsed.path == "/api/feeder-clusters":
+            if not self._require_authentication():
+                return
+            k = int(params.get("k", 4))
+            k = max(2, min(k, 10))
+            clust = cluster_city_feeders(CityGridNetwork(), k_clusters=k, seed=42)
+            profiles = []
+            for row in clust.feeder_profiles_df.to_dict(orient="records"):
+                profiles.append({
+                    "area_id": row["area_id"],
+                    "name": row["name"],
+                    "category": row["category"],
+                    "base_load_mw": round(float(row["base_load_mw"]), 1),
+                    "disruption_cost_per_hour": round(float(row["disruption_cost_per_hour"]), 1),
+                    "max_daily_quota_hours": int(row["max_daily_quota_hours"]),
+                    "priority_tier": int(row["priority_tier"]),
+                    "is_critical": bool(row["is_critical_flag"]),
+                    "cluster_id": int(row["cluster_id"]),
+                    "profile_archetype": row["profile_archetype"],
+                })
+            self._send_json({
+                "k": clust.k,
+                "inertia": clust.inertia,
+                "feature_names": clust.feature_names,
+                "profiles": profiles,
+            })
+            return
+
         if parsed.path.startswith("/api/") and not self._require_authentication():
             return
 
@@ -345,7 +534,8 @@ class FairShedHandler(SimpleHTTPRequestHandler):
             )
             filtered = df.loc[mask].copy()
             if filtered.empty:
-                filtered = df.tail(720).copy()
+                self._send_json({"error": "No demand data found for the selected date range."}, status=404)
+                return
 
             # Downsample for smooth charting if large
             step = max(1, len(filtered) // 400)
@@ -371,7 +561,10 @@ class FairShedHandler(SimpleHTTPRequestHandler):
                     "max": diurnal["max"].round(1).tolist(),
                 },
                 "monthly": {
-                    "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][:len(monthly)],
+                    "months": [
+                        pd.Timestamp(year=2000, month=int(month), day=1).strftime("%b")
+                        for month in monthly["month"]
+                    ],
                     "mean": monthly["mean"].round(1).tolist(),
                     "max": monthly["max"].round(1).tolist(),
                 },
@@ -389,7 +582,7 @@ class FairShedHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/schedule":
             df = get_cached_df()
             sample_day = df.tail(24).copy().reset_index(drop=True)
-            demands = np.array(sample_day["energy_consumption_mw"].values, dtype=float)
+            demands = sample_day["energy_consumption_mw"].to_numpy(dtype=float)
 
             is_ramadan = bool(params.get("is_ramadan", True))
             exclude_hospitals = bool(params.get("exclude_hospitals", True))
@@ -406,7 +599,21 @@ class FairShedHandler(SimpleHTTPRequestHandler):
                         f.max_daily_outage_hours = max_daily_quota
 
             capacities = grid.simulate_generation_capacity(demands, average_shortfall_ratio=(1.0 - capacity_ratio), seed=42)
-            shortfalls = grid.calculate_shortfall(demands, capacities)
+            actual_shortfalls = grid.calculate_shortfall(demands, capacities)
+            try:
+                probabilistic_forecast = forecast_probabilistic_shortfall(
+                    demands,
+                    sample_day["temperature_c"].to_numpy(dtype=float),
+                    capacities,
+                    sample_day["timestamp"].dt.hour.to_numpy(dtype=int),
+                )
+            except (RuntimeError, ValueError) as error:
+                self._send_json(
+                    {"error": f"Probabilistic shortfall model unavailable: {error}"},
+                    status=503,
+                )
+                return
+            shortfalls = probabilistic_forecast.expected_shortfall_mw
             area_demands = grid.calculate_hourly_area_demands(demands)
 
             evaluator = ScheduleEvaluator(grid, shortfalls, area_demands, max_daily_quota, max_consecutive, is_ramadan)
@@ -416,12 +623,6 @@ class FairShedHandler(SimpleHTTPRequestHandler):
                 res = hc.solve_steepest_ascent(max_iterations=120)
                 sched_matrix = res.best_schedule
                 algo_title = "Hill Climbing (Steepest Ascent)"
-                runtime = res.runtime_seconds
-            elif algo == "random_restart":
-                hc = HillClimbingScheduler(evaluator, seed=42)
-                res = hc.solve_random_restart(num_restarts=4, iterations_per_restart=40)
-                sched_matrix = res.best_schedule
-                algo_title = "Random-Restart Hill Climbing"
                 runtime = res.runtime_seconds
             elif algo == "genetic":
                 ga = GeneticAlgorithmScheduler(evaluator, population_size=20, seed=42)
@@ -458,8 +659,13 @@ class FairShedHandler(SimpleHTTPRequestHandler):
                 "schedule_matrix": sched_matrix.tolist(),
                 "hourly_shed": [round(x, 1) for x in hourly_shed],
                 "hourly_shortfall": [round(x, 1) for x in shortfalls.tolist()],
+                "hourly_actual_shortfall": [round(x, 1) for x in actual_shortfalls.tolist()],
                 "hourly_demand": [round(x, 1) for x in demands.tolist()],
                 "hourly_capacity": [round(x, 1) for x in capacities.tolist()],
+                "shortfall_state_probabilities": probabilistic_forecast.state_probabilities.tolist(),
+                "markov_prior_probabilities": probabilistic_forecast.markov_prior_probabilities.tolist(),
+                "shortfall_state_names": list(SHORTFALL_STATE_NAMES),
+                "risk_summary": probabilistic_forecast.summary(),
                 "outages_per_area": {f.area_id: int(np.sum(sched_matrix[i, :])) for i, f in enumerate(grid.feeders)},
                 "report": report_data,
             }
@@ -552,25 +758,6 @@ class FairShedHandler(SimpleHTTPRequestHandler):
                         {"algo": "Greedy Best-First Search", "nodes": gbfs.nodes_expanded, "shed_mw": round(gbfs.total_shed_mw, 1), "cost": gbfs.total_cost, "feeders": gbfs.selected_feeder_ids},
                         {"algo": "A* Search (Provably Optimal)", "nodes": astar.nodes_expanded, "shed_mw": round(astar.total_shed_mw, 1), "cost": astar.total_cost, "feeders": astar.selected_feeder_ids},
                     ]
-                }
-                self._send_json(data)
-                return
-
-            elif exp_type == "kalman":
-                noise_std = float(params.get("noise_std", 100.0))
-                df = get_cached_df()
-                demands = df.tail(24)["energy_consumption_mw"].values
-                kf = PowerGridKalmanFilter(measurement_noise_r=(noise_std ** 2))
-                noisy = demands + np.random.normal(0, noise_std, size=len(demands))
-                diag = kf.filter_sequence(noisy, ground_truth=demands)
-
-                data = {
-                    "raw_rmse": round(diag.raw_rmse, 2),
-                    "filtered_rmse": round(diag.filtered_rmse, 2),
-                    "reduction_pct": round(diag.noise_reduction_percentage, 1),
-                    "raw_series": noisy.round(1).tolist(),
-                    "filtered_series": diag.filtered_estimates.round(1).tolist(),
-                    "truth_series": demands.round(1).tolist(),
                 }
                 self._send_json(data)
                 return

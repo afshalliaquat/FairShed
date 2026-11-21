@@ -133,16 +133,38 @@ function renderPublicStatus(data) {
   publicData = data;
   const cards = document.getElementById("publicAreaCards");
   const select = document.getElementById("publicLocalitySelect");
+  const complaintArea = document.getElementById("complaintArea");
   select.innerHTML = '<option value="all">All Karachi localities</option>' +
     data.feeders.map((feeder) => `<option value="${feeder.id}">${feeder.name}</option>`).join("");
   select.value = pendingLocality;
+  if (complaintArea) {
+    complaintArea.innerHTML = '<option value="">Choose an area</option>' +
+      data.feeders.map((feeder) => `<option value="${feeder.id}">${feeder.name}</option>`).join("");
+  }
   const outageCount = data.feeders.filter((feeder) => feeder.outage_hours > 0).length;
   document.getElementById("publicOnlineCount").textContent = `${data.feeders.length - outageCount}/${data.feeders.length}`;
   document.getElementById("publicOutageCount").textContent = outageCount;
   document.getElementById("publicProtectedCount").textContent = data.feeders.filter((feeder) => feeder.exempt).length;
   document.getElementById("publicUpdatedAt").textContent = new Date(data.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  renderMaintenanceTeams(data.maintenance?.teams || []);
   renderCards();
   renderSchedule();
+}
+
+function renderMaintenanceTeams(teams) {
+  const container = document.getElementById("publicMaintenanceTeams");
+  if (!container) return;
+  container.innerHTML = teams.map((team) => {
+    const available = team.status === "available";
+    const assigned = team.assigned_area_id
+      ? `Assigned to ${team.assigned_area_id}${team.travel_minutes ? ` · ${team.travel_minutes} min` : ""}`
+      : "Ready for dispatch";
+    return `<div class="public-tool-card p-3">
+      <p class="font-bold text-sm">${team.name}</p>
+      <p class="text-xs mt-1 ${available ? "text-emerald-600" : "text-amber-600"}">${available ? "Available" : "Busy"}</p>
+      <p class="text-[11px] text-slate-500 mt-2">${available ? "Ready for dispatch" : assigned}</p>
+    </div>`;
+  }).join("");
 }
 
 function renderCards() {
@@ -222,6 +244,31 @@ document.getElementById("publicQueryForm")?.addEventListener("submit", (event) =
   event.preventDefault();
   const input = document.getElementById("publicQueryInput");
   document.getElementById("publicQueryAnswer").textContent = answerPublicQuery(input.value.trim());
+});
+
+document.getElementById("publicComplaintForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const areaId = document.getElementById("complaintArea")?.value;
+  const resultBox = document.getElementById("publicComplaintResult");
+  if (!areaId) {
+    if (resultBox) resultBox.textContent = "Please choose an affected area.";
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/complaints", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ area_id: areaId, hour: new Date().getHours() })
+    });
+    const data = await response.json();
+    if (resultBox) {
+      resultBox.textContent = data.message || (data.accepted ? "Complaint accepted." : "Complaint not accepted.");
+    }
+    if (data.maintenance) renderMaintenanceTeams(data.maintenance.teams || []);
+  } catch (error) {
+    if (resultBox) resultBox.textContent = "Could not submit the complaint. Please try again.";
+  }
 });
 
 fetch("/api/public-status")

@@ -4,8 +4,7 @@ Generates publication-quality charts using Matplotlib:
 1. Fairness Bar Chart: Outage hours per city area (highlighting hospital exemption & equality).
 2. 24-Hour Load-Shedding Heatmap: Feeder vs Hour matrix showing power status.
 3. Grid Shortfall Dispatch Curve: Hourly Demand vs Available Generation vs Load Shed.
-4. Kalman Filter Denoising Plot: Noisy Substation Telemetry vs Filtered Estimate vs True Load.
-5. Algorithm Benchmark Comparison: Jain's Fairness Index & Shortfall Fulfillment.
+4. Algorithm Benchmark Comparison: Jain's Fairness Index & Shortfall Fulfillment.
 """
 
 import os
@@ -97,8 +96,6 @@ def plot_fairness_outage_chart(
     fig.savefig(save_path, dpi=200)
     plt.close(fig)
     return save_path
-
-
 def plot_load_shedding_heatmap(
     schedule_matrix: np.ndarray,
     feeders: List[FeederArea],
@@ -186,35 +183,6 @@ def plot_demand_shortfall_dispatch(
     ax2.set_xticklabels([f"{h:02d}:00" for h in hours], rotation=45, ha="right", fontsize=8)
     ax2.legend(loc="upper right", frameon=True)
     ax2.grid(True, linestyle=":", alpha=0.6)
-
-    plt.tight_layout()
-    fig.savefig(save_path, dpi=200)
-    plt.close(fig)
-    return save_path
-
-
-def plot_kalman_denoising(
-    raw_measurements: np.ndarray,
-    filtered_estimates: np.ndarray,
-    ground_truth: np.ndarray,
-    save_path: Optional[Path] = None,
-) -> Path:
-    """Visualizes Kalman filter denoising on noisy SCADA load telemetry."""
-    if save_path is None:
-        save_path = FIGURES_DIR / "kalman_filtering_comparison.png"
-
-    fig, ax = plt.subplots(figsize=(12, 5))
-    x = np.arange(len(raw_measurements))
-
-    ax.scatter(x, raw_measurements, color="red", alpha=0.45, s=20, label="Noisy Substation Telemetry (Raw Sensor)")
-    ax.plot(x, ground_truth, color="black", linestyle="--", linewidth=1.5, label="True Underlying Grid Demand")
-    ax.plot(x, filtered_estimates, color="blue", linewidth=2.0, label="Kalman Filter Estimate (Denoised)")
-
-    ax.set_title("State Estimation: 2D Kalman Filter Denoising for SCADA Grid Telemetry", fontsize=13, fontweight="bold")
-    ax.set_xlabel("Time Step (Hours)", fontsize=10, fontweight="bold")
-    ax.set_ylabel("Grid Demand (MW)", fontsize=10, fontweight="bold")
-    ax.legend(loc="upper right", frameon=True)
-    ax.grid(True, linestyle=":", alpha=0.6)
 
     plt.tight_layout()
     fig.savefig(save_path, dpi=200)

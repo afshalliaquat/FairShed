@@ -29,6 +29,7 @@ let PREDICTED_DEMANDS_24H = new Array(24).fill(0);
 let LINEAR_DEMANDS_24H = new Array(24).fill(0);
 let CAPACITIES_24H = DEMANDS_24H.map(d => Math.round(d * 0.82));
 let SHORTFALLS_24H = DEMANDS_24H.map((d, i) => Math.max(0, d - CAPACITIES_24H[i]));
+let SCHEDULED_SHED_24H = null;
 
 // Precomputed Baseline Matrices (10 feeders x 24 hours)
 let activeScheduleMatrix = [
@@ -55,16 +56,21 @@ let activeScheduleMatrix = [
 ];
 
 let currentAlgorithm = "csp"; // "csp", "hill_climbing", "genetic"
+let scheduleRequestId = 0;
 
 // Chart instances
 let demandChartInst = null;
 let edaTimeSeriesInst = null;
 let edaDiurnalInst = null;
 let edaMonthlyInst = null;
+let edaRequestId = 0;
+let maintenanceDispatchOptions = {};
+let maintenanceSelectedTeam = {};
+let maintenanceSelectedAlgorithm = {};
 let forecastCompareInst = null;
 let schedPowerBalanceInst = null;
 let schedFairnessBarInst = null;
-let kalmanChartInst = null;
+let feederClusterInst = null;
 let cityMapInst = null;
 const cityMapMarkers = new Map();
 const cityMapRegions = new Map();
@@ -118,7 +124,6 @@ document.addEventListener("DOMContentLoaded", () => {
     initEDAData();
     initForecastChart();
     initLiveScheduler();
-    initKalmanChart();
   }, 100);
 });
 
@@ -140,8 +145,10 @@ async function loadForecastData() {
     PREDICTED_DEMANDS_24H = data.random_forest;
     LINEAR_DEMANDS_24H = data.linear_regression;
     ACTUAL_DEMANDS_24H = actualData.demands_24h;
-    CAPACITIES_24H = DEMANDS_24H.map(d => Math.round(d * 0.82));
-    SHORTFALLS_24H = DEMANDS_24H.map((d, i) => Math.max(0, d - CAPACITIES_24H[i]));
+    DEMANDS_24H = actualData.demands_24h;
+    CAPACITIES_24H = actualData.capacities_24h;
+    SHORTFALLS_24H = actualData.shortfalls_24h;
+    SCHEDULED_SHED_24H = actualData.hourly_shed_24h;
 
     if (demandChartInst) {
       demandChartInst.data.datasets[0].data = ACTUAL_DEMANDS_24H;
@@ -153,6 +160,7 @@ async function loadForecastData() {
       schedPowerBalanceInst.data.datasets[0].data = DEMANDS_24H;
       schedPowerBalanceInst.data.datasets[1].data = CAPACITIES_24H;
       schedPowerBalanceInst.data.datasets[2].data = SHORTFALLS_24H;
+      schedPowerBalanceInst.data.datasets[3].data = SCHEDULED_SHED_24H;
       schedPowerBalanceInst.update();
     }
   } catch (error) {
@@ -433,8 +441,10 @@ function switchTab(tabId) {
     setTimeout(renderSchedulerCharts, 50);
   } else if (tabId === "schedule") {
     setTimeout(renderFullScheduleTable, 50);
-  } else if (tabId === "experiments") {
-    setTimeout(renderKalmanChart, 50);
+  } else if (tabId === "complaints") {
+    setTimeout(loadMaintenanceTeamStatus, 50);
+  } else if (tabId === "clustering") {
+    setTimeout(loadFeederClusters, 50);
   }
 }
 
@@ -766,7 +776,6 @@ async function selectAlgorithm(algo) {
   const algorithmLabels = {
     csp: "CSP Backtracking (MRV + Forward Checking)",
     hill_climbing: "Steepest-Ascent Hill Climbing",
-    random_restart: "Random-Restart Hill Climbing",
     genetic: "Genetic Algorithm"
   };
 
@@ -785,8 +794,6 @@ async function selectAlgorithm(algo) {
 
   if (activeLabel) activeLabel.textContent = algorithmLabels[algo] || algorithmLabels.csp;
 
-  // Use the same API-backed solver as the live scheduler so each selection
-  // produces the algorithm's actual schedule.
   await runLiveScheduler(algo);
 }
 
@@ -858,18 +865,11 @@ function closeAreaModal() {
 // ============================================================================
 // 6. HISTORICAL DEMAND & SEASONAL EDA
 // ============================================================================
-const EDA_DATA = {
-  diurnalHours: Array.from({ length: 24 }, (_, i) => i),
-  diurnalMean: [12800, 11950, 11420, 11230, 11840, 12610, 13780, 15190, 16380, 17150, 17580, 17410, 17220, 17480, 17790, 17920, 18090, 18250, 17820, 17390, 16880, 15760, 14590, 13480],
-  diurnalMax: [15100, 14200, 13600, 13400, 13900, 14800, 16100, 17400, 18200, 18600, 18825, 18700, 18600, 18750, 18800, 18810, 18820, 18825, 18600, 18200, 17800, 16900, 16100, 15400],
-  diurnalMin: [10400, 9700, 9300, 9100, 9500, 10200, 11100, 12300, 13200, 13900, 14200, 14100, 13900, 14100, 14400, 14500, 14600, 14700, 14400, 14000, 13600, 12700, 11800, 10900],
-  months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-  monthlyMean: [12200, 12800, 13900, 15400, 16800, 18100, 18450, 17900, 16400, 14800, 13100, 12400],
-  monthlyMax: [14200, 14900, 16100, 17600, 18400, 18825, 18800, 18600, 17800, 16300, 14800, 14100]
-};
-
 function initEDAData() {
   renderEDACharts();
+  document.getElementById("edaStartDate")?.addEventListener("change", loadEDAData);
+  document.getElementById("edaEndDate")?.addEventListener("change", loadEDAData);
+  loadEDAData();
 }
 
 function setEDAPreset(preset) {
@@ -895,75 +895,89 @@ function setEDAPreset(preset) {
 }
 
 async function loadEDAData() {
+  const requestId = ++edaRequestId;
   const startDate = document.getElementById("edaStartDate")?.value || "2023-01-01";
   const endDate = document.getElementById("edaEndDate")?.value || "2024-12-31";
+  const status = document.getElementById("edaStatus");
+  if (status) status.textContent = "Loading EDA data…";
 
-  // Try API first
   try {
     const res = await fetch("/api/eda", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ startDate, endDate })
     });
-    if (res.ok) {
-      const data = await res.json();
-      updateEDADisplay(data);
-      return;
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || `EDA request failed (${res.status}).`);
     }
-  } catch (err) {
-    // Fall back to client calculation
+    if (requestId !== edaRequestId) return;
+    updateEDADisplay(data);
+    if (status) {
+      status.textContent = `Showing ${Number(data.filtered_count).toLocaleString()} hourly records (${startDate} to ${endDate}).`;
+    }
+  } catch (error) {
+    if (requestId !== edaRequestId) return;
+    clearEDADisplay();
+    const message = error instanceof Error ? error.message : String(error);
+    if (status) status.textContent = `Unable to load EDA data: ${message}`;
+    console.error("Unable to load EDA data:", error);
   }
-
-  // Client fallback calculation
-  const isSummer = startDate.includes("-06") || startDate.includes("-07") || startDate.includes("-08");
-  const isWinter = startDate.includes("-11") || startDate.includes("-12") || startDate.includes("-01");
-
-  const count = isSummer ? "2,208 hrs" : isWinter ? "1,464 hrs" : "17,376 hrs";
-  const mean = isSummer ? "18,150 MW" : isWinter ? "12,420 MW" : "15,134 MW";
-  const max = isSummer ? "18,825 MW" : isWinter ? "14,500 MW" : "18,825 MW";
-  const min = isSummer ? "14,100 MW" : isWinter ? "9,100 MW" : "11,200 MW";
-
-  document.getElementById("edaCount").textContent = count;
-  document.getElementById("edaMean").textContent = mean;
-  document.getElementById("edaMax").textContent = max;
-  document.getElementById("edaMin").textContent = min;
-
-  renderEDACharts();
 }
 
 function updateEDADisplay(data) {
-  if (!data) return;
+  if (!data?.timeseries || !data?.diurnal || !data?.monthly) {
+    throw new Error("The EDA response is missing chart data.");
+  }
   document.getElementById("edaCount").textContent = Number(data.filtered_count).toLocaleString() + " hrs";
   document.getElementById("edaMean").textContent = Number(data.stats.mean).toLocaleString() + " MW";
   document.getElementById("edaMax").textContent = Number(data.stats.max).toLocaleString() + " MW";
   document.getElementById("edaMin").textContent = Number(data.stats.min).toLocaleString() + " MW";
 
-  if (data.timeseries && edaTimeSeriesInst) {
+  if (edaTimeSeriesInst) {
     edaTimeSeriesInst.data.labels = data.timeseries.timestamps;
     edaTimeSeriesInst.data.datasets[0].data = data.timeseries.demands;
     edaTimeSeriesInst.update();
   }
+  if (edaDiurnalInst) {
+    edaDiurnalInst.data.labels = data.diurnal.hours.map(hour => `${hour}:00`);
+    edaDiurnalInst.data.datasets[0].data = data.diurnal.mean;
+    edaDiurnalInst.data.datasets[1].data = data.diurnal.max;
+    edaDiurnalInst.data.datasets[2].data = data.diurnal.min;
+    edaDiurnalInst.update();
+  }
+  if (edaMonthlyInst) {
+    edaMonthlyInst.data.labels = data.monthly.months;
+    edaMonthlyInst.data.datasets[0].data = data.monthly.mean;
+    edaMonthlyInst.data.datasets[1].data = data.monthly.max;
+    edaMonthlyInst.update();
+  }
+}
+
+function clearEDADisplay() {
+  document.getElementById("edaCount").textContent = "—";
+  document.getElementById("edaMean").textContent = "—";
+  document.getElementById("edaMax").textContent = "—";
+  document.getElementById("edaMin").textContent = "—";
+  [edaTimeSeriesInst, edaDiurnalInst, edaMonthlyInst].forEach((chart) => {
+    if (!chart) return;
+    chart.data.labels = [];
+    chart.data.datasets.forEach(dataset => { dataset.data = []; });
+    chart.update();
+  });
 }
 
 function renderEDACharts() {
   // 1. Time Series Chart
   const ctxTs = document.getElementById("edaTimeSeriesChart")?.getContext("2d");
   if (ctxTs && !edaTimeSeriesInst) {
-    // Generate synthetic 100 sample timeline points
-    const tsLabels = [];
-    const tsData = [];
-    for (let i = 0; i < 96; i++) {
-      tsLabels.push(`Day ${(i / 24).toFixed(0)} - ${i % 24}:00`);
-      tsData.push(14000 + 3500 * Math.sin(i * 0.26) + (Math.random() * 800 - 400));
-    }
-
     edaTimeSeriesInst = new Chart(ctxTs, {
       type: "line",
       data: {
-        labels: tsLabels,
+        labels: [],
         datasets: [{
           label: "Hourly Demand (MW)",
-          data: tsData,
+          data: [],
           borderColor: "#4f46e5",
           backgroundColor: "rgba(79, 70, 229, 0.08)",
           borderWidth: 1.8,
@@ -990,11 +1004,11 @@ function renderEDACharts() {
     edaDiurnalInst = new Chart(ctxDiurnal, {
       type: "line",
       data: {
-        labels: EDA_DATA.diurnalHours.map(h => `${h}:00`),
+        labels: [],
         datasets: [
           {
             label: "Mean Load (MW)",
-            data: EDA_DATA.diurnalMean,
+            data: [],
             borderColor: "#3b82f6",
             borderWidth: 2.8,
             pointRadius: 2,
@@ -1002,7 +1016,7 @@ function renderEDACharts() {
           },
           {
             label: "Max Peak (MW)",
-            data: EDA_DATA.diurnalMax,
+            data: [],
             borderColor: "#ef4444",
             borderDash: [5, 5],
             borderWidth: 1.8,
@@ -1011,7 +1025,7 @@ function renderEDACharts() {
           },
           {
             label: "Min Trough (MW)",
-            data: EDA_DATA.diurnalMin,
+            data: [],
             borderColor: "#10b981",
             borderDash: [5, 5],
             borderWidth: 1.8,
@@ -1038,17 +1052,17 @@ function renderEDACharts() {
     edaMonthlyInst = new Chart(ctxMonthly, {
       type: "bar",
       data: {
-        labels: EDA_DATA.months,
+        labels: [],
         datasets: [
           {
             label: "Mean Demand (MW)",
-            data: EDA_DATA.monthlyMean,
+            data: [],
             backgroundColor: "rgba(99, 102, 241, 0.75)",
             borderRadius: 6
           },
           {
             label: "Monthly Peak (MW)",
-            data: EDA_DATA.monthlyMax,
+            data: [],
             backgroundColor: "rgba(244, 63, 94, 0.7)",
             borderRadius: 6
           }
@@ -1123,13 +1137,290 @@ function renderForecastCharts() {
 // ============================================================================
 function initLiveScheduler() {
   renderSchedulerCharts();
+  loadMaintenanceTeamStatus();
+  setInterval(loadMaintenanceTeamStatus, 5000);
+}
+
+async function loadMaintenanceTeamStatus() {
+  try {
+    const response = await fetch("/api/public-status");
+    if (!response.ok) return;
+    const data = await response.json();
+    renderComplaintMaintenanceTab(data.maintenance?.teams || [], data.maintenance?.complaints || []);
+  } catch (error) {
+    console.error("Unable to load maintenance team status:", error);
+  }
+}
+
+function renderComplaintMaintenanceTab(teams, complaints = []) {
+  const teamContainer = document.getElementById("complaintTeamStatus");
+  if (teamContainer) {
+    teamContainer.innerHTML = teams.map((team) => {
+    const busy = team.status === "busy";
+    const completionButton = busy
+      ? `<button type="button" class="mt-3 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold" onclick="completeMaintenanceTeam('${team.id}')">Mark repair complete</button>`
+      : '<p class="mt-3 text-xs text-emerald-600 font-bold">Available</p>';
+    return `<div class="p-3 rounded-lg bg-white border border-slate-200">
+      <p class="text-sm font-bold text-slate-800">${team.name}</p>
+      <p class="text-xs ${busy ? "text-amber-600" : "text-emerald-600"} mt-1">${busy ? "Busy" : "Available"}</p>
+      ${busy ? `<p class="text-xs text-slate-500 mt-1">${team.assigned_complaint_id} · ${team.assigned_area_id}${team.travel_minutes ? ` · ${team.travel_minutes} min` : ""}</p>` : ""}
+      ${completionButton}
+    </div>`;
+    }).join("");
+  }
+
+  const pending = complaints.filter((complaint) => complaint.status === "pending_admin");
+  maintenanceDispatchOptions = Object.fromEntries(
+    pending.map((complaint) => [complaint.id, complaint.dispatch_options || { recommended_team_id: null, options: [] }])
+  );
+  const pendingCount = document.getElementById("complaintPendingCount");
+  if (pendingCount) pendingCount.textContent = `${pending.length} pending`;
+  const dispatchList = document.getElementById("complaintDispatchList");
+  if (dispatchList) {
+    dispatchList.innerHTML = pending.length ? pending.map((complaint) => {
+      const dispatch = complaint.dispatch_options || { recommended_team_id: null, options: [] };
+      const availableTeams = teams.filter((team) => team.status === "available");
+      const selectedTeam = maintenanceSelectedTeam[complaint.id];
+      const selectedAlgorithm = maintenanceSelectedAlgorithm[complaint.id] || "UCS";
+      const options = availableTeams.map((team) => {
+        const option = dispatch.options.find((item) => item.team_id === team.id);
+        const algorithmRoute = selectedAlgorithm === "A*" ? option?.astar : option?.ucs;
+        const minutes = algorithmRoute?.travel_minutes;
+        const recommendedTeamId = selectedAlgorithm === "A*"
+          ? dispatch.astar_recommended_team_id
+          : dispatch.ucs_recommended_team_id;
+        const recommended = team.id === recommendedTeamId ? " - Recommended" : "";
+        return `<option value="${team.id}">${team.name}${minutes != null ? ` - ${minutes} min` : ""}${recommended}</option>`;
+      }).join("");
+      const routeOptions = (dispatch.options || []).map((teamOption) => {
+        const ucs = teamOption.ucs ? `${teamOption.ucs.travel_minutes} min` : "Unavailable";
+        const astar = teamOption.astar ? `${teamOption.astar.travel_minutes} min` : "Unavailable";
+        return `<div class="text-xs text-slate-600">
+          <strong>${teamOption.team_id}</strong>: UCS ${ucs} | A* ${astar}
+        </div>`;
+      }).join("");
+      return `<div class="p-4 bg-white border border-slate-200 rounded-xl">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div><p class="text-sm font-bold text-slate-800">${complaint.id}</p><p class="text-xs text-slate-500">${complaint.area_id} · Hour ${complaint.hour}:00 · Pending admin review</p></div>
+          ${availableTeams.length ? `<span class="text-xs font-bold text-emerald-700">Available teams: ${availableTeams.length}</span>` : '<span class="text-xs font-bold text-rose-700">No team available</span>'}
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <div class="p-3 bg-slate-50 rounded-lg"><p class="text-xs font-bold text-slate-700 mb-1">Search comparison</p>${routeOptions}</div>
+          <div class="p-3 bg-slate-50 rounded-lg">
+            <label class="block text-xs font-bold text-slate-700 mb-1" for="teamFor_${complaint.id}">Assign team</label>
+            ${availableTeams.length ? `<select id="teamFor_${complaint.id}" class="w-full text-xs p-2 border border-slate-300 rounded mb-2" onchange="updateMaintenanceEstimate('${complaint.id}')">${options}</select>
+            <select id="algorithmFor_${complaint.id}" class="w-full text-xs p-2 border border-slate-300 rounded mb-2" onchange="updateMaintenanceEstimate('${complaint.id}')"><option value="UCS" ${selectedAlgorithm === "UCS" ? "selected" : ""}>UCS - Lowest-cost route</option><option value="A*" ${selectedAlgorithm === "A*" ? "selected" : ""}>A* - Heuristic route</option></select>
+            <div id="estimateFor_${complaint.id}" class="p-2 mb-2 rounded-lg bg-white border border-slate-200 text-xs text-slate-700"></div>
+            <button type="button" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold" onclick="assignMaintenanceTeam('${complaint.id}')">Accept & assign team</button>`
+              : '<p class="text-xs text-amber-700">A team can be assigned after a repair is marked complete.</p>'}
+          </div>
+        </div>
+      </div>`;
+    }).join("") : '<p class="text-sm text-slate-500">No pending complaints.</p>';
+    pending.forEach((complaint) => {
+      const teamSelect = document.getElementById(`teamFor_${complaint.id}`);
+      if (teamSelect && maintenanceSelectedTeam[complaint.id]) {
+        teamSelect.value = maintenanceSelectedTeam[complaint.id];
+      }
+      const algorithmSelect = document.getElementById(`algorithmFor_${complaint.id}`);
+      if (algorithmSelect && maintenanceSelectedAlgorithm[complaint.id]) {
+        algorithmSelect.value = maintenanceSelectedAlgorithm[complaint.id];
+      }
+      updateMaintenanceEstimate(complaint.id);
+    });
+  }
+
+  const history = document.getElementById("complaintHistory");
+  if (history) {
+    const relevant = complaints.filter((complaint) => complaint.status !== "pending_admin");
+    history.innerHTML = relevant.length ? relevant.map((complaint) => `
+      <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg border border-slate-200">
+        <div><p class="text-xs font-bold text-slate-800">${complaint.id} · ${complaint.area_id}</p><p class="text-[11px] text-slate-500">Hour ${complaint.hour}:00${complaint.team_id ? ` · ${complaint.team_id} · ${complaint.travel_minutes} min` : ""}${complaint.assignment_algorithm ? ` · ${complaint.assignment_algorithm}` : ""}</p></div>
+        <span class="text-xs font-bold ${complaint.status === "completed" ? "text-emerald-700" : complaint.status === "planned_outage" ? "text-slate-600" : "text-indigo-700"}">${complaint.status}</span>
+      </div>`).join("") : '<p class="text-sm text-slate-500">No complaint history.</p>';
+  }
+}
+
+function updateMaintenanceEstimate(complaintId) {
+  const teamSelect = document.getElementById(`teamFor_${complaintId}`);
+  const algorithmSelect = document.getElementById(`algorithmFor_${complaintId}`);
+  const estimateBox = document.getElementById(`estimateFor_${complaintId}`);
+  if (!teamSelect || !algorithmSelect || !estimateBox) return;
+
+  maintenanceSelectedTeam[complaintId] = teamSelect.value;
+  maintenanceSelectedAlgorithm[complaintId] = algorithmSelect.value;
+
+  const dispatch = maintenanceDispatchOptions[complaintId] || { options: [] };
+  const recommendedTeamId = algorithmSelect.value === "A*"
+    ? dispatch.astar_recommended_team_id
+    : dispatch.ucs_recommended_team_id;
+
+  Array.from(teamSelect.options).forEach((option) => {
+    const teamOption = dispatch.options.find((item) => item.team_id === option.value);
+    const routeOption = algorithmSelect.value === "A*" ? teamOption?.astar : teamOption?.ucs;
+    const minutes = routeOption?.travel_minutes;
+    const teamName = teamOption?.team_name || option.value;
+    const recommended = option.value === recommendedTeamId ? " - Recommended" : "";
+    option.textContent = `${teamName}${minutes != null ? ` - ${minutes} min` : ""}${recommended}`;
+  });
+
+  const teamOption = dispatch.options.find((option) => option.team_id === teamSelect.value);
+  if (!teamOption) {
+    estimateBox.textContent = "No route estimate available.";
+    return;
+  }
+
+  const algorithm = algorithmSelect.value;
+  const routeOption = algorithm === "A*" ? teamOption.astar : teamOption.ucs;
+  if (!routeOption) {
+    estimateBox.textContent = "Selected route is unavailable.";
+    return;
+  }
+
+  const routeText = routeOption.route.join(" → ");
+  estimateBox.innerHTML =
+    `<strong>${algorithm} estimate:</strong> ${routeOption.travel_minutes} minutes<br>` +
+    `<span class="text-slate-500">Route: ${routeText}</span>`;
+}
+
+async function completeMaintenanceTeam(teamId) {
+  try {
+    const response = await fetch("/api/maintenance/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team_id: teamId })
+    });
+    if (!response.ok) throw new Error(`Completion failed (${response.status})`);
+    const data = await response.json();
+    renderComplaintMaintenanceTab(data.maintenance?.teams || [], data.maintenance?.complaints || []);
+  } catch (error) {
+    console.error("Unable to complete maintenance dispatch:", error);
+  }
+}
+
+// 10. SEPARATE FEEDER CLUSTERING FEATURE
+async function loadFeederClusters() {
+  const k = Number(document.getElementById("clusterCount")?.value || 4);
+  const status = document.getElementById("clusterStatus");
+  if (status) status.textContent = "Running K-Means…";
+  try {
+    const response = await fetch("/api/feeder-clusters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "K-Means request failed.");
+    renderFeederClusters(data);
+    if (status) status.textContent = `${data.k} clusters · inertia ${data.inertia}`;
+  } catch (error) {
+    if (status) status.textContent = `Unable to cluster feeders: ${error.message}`;
+    console.error("Unable to run feeder clustering:", error);
+  }
+}
+
+function renderFeederClusters(data) {
+  const colors = ["#4f46e5", "#10b981", "#f59e0b", "#ef4444", "#0ea5e9", "#a855f7", "#64748b", "#ec4899", "#84cc16", "#f97316"];
+  const clusterIds = [...new Set(data.profiles.map((profile) => profile.cluster_id))].sort((a, b) => a - b);
+  const datasets = clusterIds.map((clusterId) => {
+    const profiles = data.profiles.filter((profile) => profile.cluster_id === clusterId);
+    return {
+      label: `Cluster ${clusterId + 1}: ${profiles[0]?.profile_archetype || "Profile"}`,
+      data: profiles.map((profile) => ({
+        x: profile.base_load_mw,
+        y: profile.disruption_cost_per_hour,
+        feederName: profile.name,
+        areaId: profile.area_id
+      })),
+      backgroundColor: colors[clusterId % colors.length],
+      borderColor: colors[clusterId % colors.length],
+      pointRadius: 7,
+      pointHoverRadius: 9
+    };
+  });
+
+  const ctx = document.getElementById("feederClusterChart")?.getContext("2d");
+  if (ctx) {
+    if (feederClusterInst) feederClusterInst.destroy();
+    feederClusterInst = new Chart(ctx, {
+      type: "scatter",
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const point = context.raw;
+                return `${point.feederName}: ${point.x} MW, cost ${point.y}/hr`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { title: { display: true, text: "Base Load (MW)" } },
+          y: { title: { display: true, text: "Disruption Cost per Hour" } }
+        }
+      }
+    });
+  }
+
+  const summary = document.getElementById("clusterSummary");
+  if (summary) {
+    summary.innerHTML = clusterIds.map((clusterId) => {
+      const profiles = data.profiles.filter((profile) => profile.cluster_id === clusterId);
+      const meanLoad = profiles.reduce((sum, profile) => sum + profile.base_load_mw, 0) / profiles.length;
+      const meanCost = profiles.reduce((sum, profile) => sum + profile.disruption_cost_per_hour, 0) / profiles.length;
+      return `<div class="p-3 rounded-lg border border-slate-200" style="border-left:4px solid ${colors[clusterId % colors.length]}">
+        <p class="text-xs font-bold text-slate-800">Cluster ${clusterId + 1}</p>
+        <p class="text-[11px] text-slate-500 mt-1">${profiles[0]?.profile_archetype || "Profile"}</p>
+        <p class="text-[11px] text-slate-600 mt-1">${profiles.length} feeders · ${meanLoad.toFixed(0)} MW avg · ${meanCost.toFixed(0)} cost/hr</p>
+      </div>`;
+    }).join("");
+  }
+
+  const tableBody = document.getElementById("clusterTableBody");
+  if (tableBody) {
+    tableBody.innerHTML = data.profiles.map((profile) => `
+      <tr class="border-b border-slate-100">
+        <td class="py-2 pr-3 font-semibold text-slate-700">${profile.name}</td>
+        <td>Cluster ${profile.cluster_id + 1}</td>
+        <td>${profile.profile_archetype}</td>
+        <td>${profile.base_load_mw}</td>
+        <td>${profile.disruption_cost_per_hour}</td>
+      </tr>`).join("");
+  }
+}
+
+async function assignMaintenanceTeam(complaintId) {
+  const teamSelect = document.getElementById(`teamFor_${complaintId}`);
+  const algorithmSelect = document.getElementById(`algorithmFor_${complaintId}`);
+  if (!teamSelect || !algorithmSelect) return;
+  try {
+    const response = await fetch("/api/maintenance/assign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        complaint_id: complaintId,
+        team_id: teamSelect.value,
+        algorithm: algorithmSelect.value
+      })
+    });
+    if (!response.ok) throw new Error(`Assignment failed (${response.status})`);
+    const data = await response.json();
+    renderComplaintMaintenanceTab(data.maintenance?.teams || [], data.maintenance?.complaints || []);
+  } catch (error) {
+    console.error("Unable to assign maintenance team:", error);
+  }
 }
 
 function renderSchedulerCharts() {
   // 1. Power Balance Chart
   const ctxPb = document.getElementById("schedPowerBalanceChart")?.getContext("2d");
   if (ctxPb && !schedPowerBalanceInst) {
-    const hourlyShed = calculateHourlyShedMW(activeScheduleMatrix);
+    const hourlyShed = SCHEDULED_SHED_24H || calculateHourlyShedMW(activeScheduleMatrix);
 
     schedPowerBalanceInst = new Chart(ctxPb, {
       type: "bar",
@@ -1138,7 +1429,7 @@ function renderSchedulerCharts() {
         datasets: [
           { type: "line", label: "Demand (MW)", data: DEMANDS_24H, borderColor: "#2563eb", borderWidth: 2.5, pointRadius: 3, tension: 0.3, yAxisID: "y" },
           { type: "line", label: "Available Capacity (MW)", data: CAPACITIES_24H, borderColor: "#16a34a", borderWidth: 2, borderDash: [5, 5], pointRadius: 0, yAxisID: "y" },
-          { label: "Required Shortfall (MW)", data: SHORTFALLS_24H, backgroundColor: "rgba(244, 63, 94, 0.65)", borderRadius: 4, yAxisID: "y" },
+          { label: "Bayesian Expected Shortfall (MW)", data: SHORTFALLS_24H, backgroundColor: "rgba(244, 63, 94, 0.65)", borderRadius: 4, yAxisID: "y" },
           { label: "Scheduled Shed (MW)", data: hourlyShed, backgroundColor: "rgba(16, 185, 129, 0.75)", borderRadius: 4, yAxisID: "y" }
         ]
       },
@@ -1288,11 +1579,40 @@ function solveScheduleLocal(algo = "csp", options = {}) {
 }
 
 async function runLiveScheduler(algoOverride = null) {
+  const requestId = ++scheduleRequestId;
+  const startedAt = performance.now();
   const algo = algoOverride || document.getElementById("liveAlgoSelect")?.value || "csp";
   const liveSelect = document.getElementById("liveAlgoSelect");
+  const dashboardSelect = document.getElementById("dashboardAlgoSelect");
+  const activeLabel = document.getElementById("activeAlgoLabel");
+  const algorithmLabels = {
+    csp: "CSP Backtracking (MRV + Forward Checking)",
+    hill_climbing: "Steepest-Ascent Hill Climbing",
+    genetic: "Genetic Algorithm"
+  };
+  const algorithmLabel = algorithmLabels[algo] || algorithmLabels.csp;
+  const statusText = document.getElementById("schedulerStatus");
+  const liveStatusText = document.getElementById("liveSchedulerStatus");
+  const runButton = document.getElementById("runSchedulerButton");
+  let usedLocalFallback = false;
+  let fallbackReason = "API unavailable";
+
   if (liveSelect && liveSelect.value !== algo) {
     liveSelect.value = algo;
   }
+  if (dashboardSelect && dashboardSelect.value !== algo) {
+    dashboardSelect.value = algo;
+  }
+  if (activeLabel) {
+    activeLabel.textContent = algorithmLabel;
+  }
+  if (statusText) statusText.textContent = `Updating ${algorithmLabel}…`;
+  if (liveStatusText) liveStatusText.textContent = `Updating ${algorithmLabel}…`;
+  if (runButton) {
+    runButton.disabled = true;
+    runButton.textContent = "Updating schedule…";
+  }
+
   const genRatio = Number(document.getElementById("rngGenRatio")?.value || 82) / 100.0;
   const maxDailyQuota = Number(document.getElementById("rngDailyLimit")?.value || 4);
   const isRamadan = document.getElementById("chkRamadan")?.checked ?? true;
@@ -1300,6 +1620,7 @@ async function runLiveScheduler(algoOverride = null) {
 
   // Try API first
   let solved = null;
+  let riskSummary = null;
   try {
     const res = await fetch("/api/schedule", {
       method: "POST",
@@ -1315,7 +1636,13 @@ async function runLiveScheduler(algoOverride = null) {
     });
     if (res.ok) {
       const data = await res.json();
+      if (requestId !== scheduleRequestId) return;
       activeScheduleMatrix = data.schedule_matrix;
+      DEMANDS_24H = data.hourly_demand;
+      CAPACITIES_24H = data.hourly_capacity;
+      SHORTFALLS_24H = data.hourly_shortfall;
+      SCHEDULED_SHED_24H = data.hourly_shed;
+      riskSummary = data.risk_summary;
       CITY_AREAS.forEach((a) => {
         a.outageHours = data.outages_per_area[a.id] || 0;
       });
@@ -1325,12 +1652,20 @@ async function runLiveScheduler(algoOverride = null) {
         spread: data.report.outage_spread_hours,
         violations: 0
       };
+    } else {
+      usedLocalFallback = true;
+      fallbackReason = `server returned ${res.status}`;
     }
   } catch (err) {
-    // API not reachable, use built-in engine
+    usedLocalFallback = true;
+    fallbackReason = "server unavailable";
+    console.error("Scheduler API request failed; using local scheduler:", err);
   }
 
+  if (requestId !== scheduleRequestId) return;
+
   if (!solved) {
+    usedLocalFallback = true;
     solved = solveScheduleLocal(algo, {
       isRamadan,
       excludeHospitals,
@@ -1347,9 +1682,10 @@ async function runLiveScheduler(algoOverride = null) {
 
   // Update Charts
   if (schedPowerBalanceInst) {
+    schedPowerBalanceInst.data.datasets[0].data = DEMANDS_24H;
     schedPowerBalanceInst.data.datasets[1].data = CAPACITIES_24H;
     schedPowerBalanceInst.data.datasets[2].data = SHORTFALLS_24H;
-    schedPowerBalanceInst.data.datasets[3].data = calculateHourlyShedMW(activeScheduleMatrix);
+    schedPowerBalanceInst.data.datasets[3].data = SCHEDULED_SHED_24H || calculateHourlyShedMW(activeScheduleMatrix);
     schedPowerBalanceInst.update();
   }
 
@@ -1367,6 +1703,20 @@ async function runLiveScheduler(algoOverride = null) {
   const fairnessEl = document.getElementById("fairnessScoreKpi");
   if (fairnessEl) {
     fairnessEl.textContent = `${(solved.jains * 100).toFixed(1)}%`;
+  }
+
+  const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
+  const riskMessage = riskSummary
+    ? ` · BN risk ${riskSummary.bayesian_shortfall_probability_pct.toFixed(1)}% · Markov prior ${riskSummary.markov_shortfall_probability_pct.toFixed(1)}%`
+    : "";
+  const completionMessage = usedLocalFallback
+    ? `Updated locally in ${elapsedSeconds}s (${fallbackReason}; Bayesian/Markov inference unavailable)`
+    : `Updated in ${elapsedSeconds}s${riskMessage}`;
+  if (statusText) statusText.textContent = completionMessage;
+  if (liveStatusText) liveStatusText.textContent = completionMessage;
+  if (runButton) {
+    runButton.disabled = false;
+    runButton.innerHTML = '<i class="fa-solid fa-play mr-1.5"></i> Run Live Scheduler';
   }
 }
 
@@ -1465,49 +1815,6 @@ async function updateScenarioPrediction() {
 // ============================================================================
 // 11. AI LAB SYLLABUS TASKS & ALGORITHM DEMOS
 // ============================================================================
-function initKalmanChart() {
-  renderKalmanChart();
-}
-
-function renderKalmanChart(customData = null) {
-  const ctx = document.getElementById("kalmanChart")?.getContext("2d");
-  if (!ctx) return;
-
-  const labels = HOURS_24;
-  let truth = DEMANDS_24H;
-  let noisy = customData?.raw_series || DEMANDS_24H.map(d => d + (Math.random() * 250 - 125));
-  let filtered = customData?.filtered_series || DEMANDS_24H.map((d, i) => Math.round(d * 0.95 + noisy[i] * 0.05));
-
-  if (kalmanChartInst) {
-    kalmanChartInst.data.datasets[0].data = noisy;
-    kalmanChartInst.data.datasets[1].data = truth;
-    kalmanChartInst.data.datasets[2].data = filtered;
-    kalmanChartInst.update();
-    return;
-  }
-
-  kalmanChartInst = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [
-        { label: "Raw Sensor Telemetry (Noisy)", data: noisy, borderColor: "#ef4444", borderWidth: 1.5, pointRadius: 2.5, pointBackgroundColor: "#ef4444", showLine: false },
-        { label: "True Grid Demand (Ground Truth)", data: truth, borderColor: "#0f172a", borderWidth: 2, borderDash: [4, 4], pointRadius: 0, tension: 0.3 },
-        { label: "Kalman Filter Estimate", data: filtered, borderColor: "#2563eb", borderWidth: 2.5, pointRadius: 0, tension: 0.3 }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "top", labels: { boxWidth: 10, font: { size: 9 } } } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8, font: { size: 9 } } },
-        y: { ticks: { callback: (v) => `${(v / 1000).toFixed(0)}k`, font: { size: 9 } } }
-      }
-    }
-  });
-}
-
 async function runExperimentAPI(type) {
   try {
     const res = await fetch("/api/run-experiment", {
@@ -1515,46 +1822,24 @@ async function runExperimentAPI(type) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type })
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (type === "search") {
-        const el = document.getElementById("expSearchResults");
-        if (el && data.results) {
-          el.innerHTML = data.results.map(r => `<div>• ${r.algo.padEnd(28, ' ')}: ${r.nodes} nodes | Cost: ${r.cost}</div>`).join("");
-        }
-      } else if (type === "kalman") {
-        const el = document.getElementById("expKalmanResults");
-        if (el) {
-          el.innerHTML = `
-            <div>• Raw RMSE: ${data.raw_rmse} MW &rarr; Filtered RMSE: ${data.filtered_rmse} MW</div>
-            <div>• Noise Reduction: ${data.reduction_pct}% telemetry denoised</div>
-            <div>• Kalman Gain K: Converged at optimal steady state</div>
-          `;
-        }
-        renderKalmanChart(data);
-      } else if (type === "kmeans") {
-        const el = document.getElementById("expKmeansResults");
-        if (el && data.profiles) {
-          el.innerHTML = data.profiles.slice(0, 5).map(p => `<div>• ${p.name}: ${p.base_load_mw}MW &rarr; Archetype: [${p.profile_archetype}]</div>`).join("");
-        }
+    if (!res.ok) {
+      throw new Error(`Experiment request failed (${res.status}).`);
+    }
+
+    const data = await res.json();
+    if (type === "search") {
+      const el = document.getElementById("expSearchResults");
+      if (el && data.results) {
+        el.innerHTML = data.results.map(r => `<div>• ${r.algo.padEnd(28, ' ')}: ${r.nodes} nodes | Cost: ${r.cost}</div>`).join("");
       }
-      return;
+    } else if (type === "kmeans") {
+      const el = document.getElementById("expKmeansResults");
+      if (el && data.profiles) {
+        el.innerHTML = data.profiles.slice(0, 5).map(p => `<div>• ${p.name}: ${p.base_load_mw}MW &rarr; Archetype: [${p.profile_archetype}]</div>`).join("");
+      }
     }
   } catch (err) {
-    // Local fallback
-  }
-
-  // Local fallback
-  if (type === "kalman") {
-    renderKalmanChart();
-    const el = document.getElementById("expKalmanResults");
-    if (el) {
-      el.innerHTML = `
-        <div>• Raw Sensor Noise: std = 100 MW (Telemetry Variance)</div>
-        <div>• Kalman Filter Estimate: Filtered RMSE = 28.4 MW (72% Noise Reduction)</div>
-        <div>• HMM Viterbi: Decodes [Normal, Stressed, Emergency] states</div>
-      `;
-    }
+    console.error("Experiment request failed:", err);
   }
 }
 

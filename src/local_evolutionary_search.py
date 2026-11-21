@@ -2,9 +2,8 @@
 
 Implements optimization schedulers from scratch without external optimization libraries:
 1. Steepest-Ascent Hill Climbing with neighborhood evaluation (flips & swaps).
-2. Random-Restart Hill Climbing to escape local optima.
-3. Simulated Annealing with geometric temperature cooling schedule.
-4. Genetic Algorithm (Evolutionary Search):
+2. Simulated Annealing with geometric temperature cooling schedule.
+3. Genetic Algorithm (Evolutionary Search):
    - Chromosome: Binary schedule matrix (Feeders x 24 hours)
    - Multi-objective fitness (shortfall coverage + Jain's fairness + zero constraint violations)
    - Tournament selection, 2-point crossover, bit-flip mutation, and elitism.
@@ -13,7 +12,7 @@ Implements optimization schedulers from scratch without external optimization li
 from dataclasses import dataclass
 import math
 import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Tuple
 import numpy as np
 
 from src.city_grid import FeederArea, CityGridNetwork
@@ -254,40 +253,6 @@ class HillClimbingScheduler:
             violations=final_violations,
         )
 
-    def solve_random_restart(
-        self,
-        num_restarts: int = 5,
-        iterations_per_restart: int = 60,
-    ) -> OptimizationResult:
-        """Random-Restart Hill Climbing: Solves local optima trapping by restarting."""
-        start_time = time.perf_counter()
-        best_overall_res: Optional[OptimizationResult] = None
-
-        combined_history = []
-
-        for r in range(num_restarts):
-            res = self.solve_steepest_ascent(max_iterations=iterations_per_restart)
-            combined_history.extend(res.convergence_history)
-
-            if best_overall_res is None or res.best_score < best_overall_res.best_score:
-                best_overall_res = res
-
-        runtime = time.perf_counter() - start_time
-        assert best_overall_res is not None
-
-        return OptimizationResult(
-            algorithm_name="Random-Restart Hill Climbing",
-            best_schedule=best_overall_res.best_schedule,
-            best_score=best_overall_res.best_score,
-            hourly_shed_mw=best_overall_res.hourly_shed_mw,
-            area_outage_hours=best_overall_res.area_outage_hours,
-            iterations=len(combined_history),
-            runtime_seconds=runtime,
-            convergence_history=combined_history,
-            violations=best_overall_res.violations,
-        )
-
-
 class GeneticAlgorithmScheduler:
     """Evolutionary Search (Genetic Algorithm) for multi-objective fair load-shedding."""
 
@@ -330,11 +295,6 @@ class GeneticAlgorithmScheduler:
             pop.append(chrom)
 
         return pop
-
-    def _fitness(self, schedule: np.ndarray) -> float:
-        """Converts loss to positive fitness (higher is better)."""
-        loss, _ = self.evaluator.evaluate(schedule)
-        return 1.0 / (1.0 + (loss / 1000.0))
 
     def _tournament_select(self, pop: List[np.ndarray], fitnesses: List[float], k: int = 3) -> np.ndarray:
         """Selects parent using tournament selection."""
@@ -384,8 +344,8 @@ class GeneticAlgorithmScheduler:
         history = []
 
         for gen in range(generations):
-            fitnesses = [self._fitness(ind) for ind in pop]
             losses = [self.evaluator.evaluate(ind)[0] for ind in pop]
+            fitnesses = [1.0 / (1.0 + (loss / 1000.0)) for loss in losses]
 
             # Track global best
             min_loss_idx = int(np.argmin(losses))

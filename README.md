@@ -1,7 +1,7 @@
 # ⚡ Electricity Demand Forecast & Fair Load-Shedding Scheduler
 
 > **Project 24 | High Difficulty**  
-> **Core AI Techniques**: Supervised Regression, Constraint Satisfaction Problems (CSP), Hill Climbing & Local Search, Heuristic Search ($A^*$), Evolutionary Algorithms, Kalman Filtering, HMM State Estimation, Unsupervised Clustering, and Reinforcement Learning (Q-Learning).  
+> **Core AI Techniques**: Supervised Regression, Bayesian Networks, Markov Models, Constraint Satisfaction Problems (CSP), Hill Climbing & Local Search, Heuristic Search ($A^*$), Evolutionary Algorithms, Unsupervised Clustering, and Reinforcement Learning (Q-Learning).
 > **Tools & Libraries**: Pure Python (zero external optimization/search libraries), NumPy, Pandas, Scikit-learn, Matplotlib, Plotly.
 
 ---
@@ -18,11 +18,13 @@ When demand exceeds generation, distribution companies must enforce **load-shedd
 
 This project delivers a complete, mathematically grounded **Electricity Demand Forecasting & Fair Load-Shedding Scheduler**. It combines **next-day 24-hour hourly demand regression forecasting** with an automated **scheduling optimization engine** that covers the generation shortfall while guaranteeing hard constraints and maximizing equity (fairness) across city sectors.
 
+The live scheduler also uses a discrete Bayesian Network and a first-order Markov chain to estimate hourly shortfall risk. The Markov chain predicts shortfall-state priors from transitions in simulated historical shortfalls; the Bayesian Network updates those priors using hour, temperature, demand, and simulated capacity-margin evidence. The expected shortfall is passed to the existing CSP, hill-climbing, and genetic schedulers; these models augment those algorithms rather than adding separate algorithm choices.
+
 ---
 
 ## 🏛️ 2. AI Lab Syllabus Mapping & Architecture
 
-Every core AI lab task from the syllabus is implemented **from scratch in pure Python without bloated or high-level optimization/search libraries**, demonstrating foundational algorithmic mechanics:
+The retained AI lab tasks from the syllabus are implemented **from scratch in pure Python without bloated or high-level optimization/search libraries**, demonstrating foundational algorithmic mechanics:
 
 | Lab Week / Task | AI Paradigm / Topic | Module | Real-World Grid Implementation & Role |
 | :--- | :--- | :--- | :--- |
@@ -30,8 +32,8 @@ Every core AI lab task from the syllabus is implemented **from scratch in pure P
 | **Task 2 (Week 3 / Lab 3)** | **Uninformed Searching Algorithms** | [`src/uninformed_search.py`](src/uninformed_search.py) | **Breadth-First Search (BFS)** (minimal feeder count), **Depth-First Search (DFS)**, and **Uniform Cost Search (UCS / Dijkstra)** (minimal socio-economic disruption cost). |
 | **Task 3 (Week 4 / Lab 4)** | **Informed Searching Algorithms** | [`src/informed_search.py`](src/informed_search.py) | **Greedy Best-First Search** ($h(n)$ deficit distance) and **$A^*$ Search** ($f(n) = g(n) + h(n)$ with mathematically admissible unit-cost lower-bound heuristic). |
 | **Task 4 (Week 5 / Lab 5)** | **Constraint Satisfaction Problems (CSP)** | [`src/csp_scheduler.py`](src/csp_scheduler.py) | 24-hour schedule formulation using **Backtracking Search**, **Minimum Remaining Values (MRV)** heuristic, **Degree heuristic**, **Least Constraining Value (LCV)**, and **Forward Checking**. |
-| **Task 5 (Week 7 / Lab 6)** | **Local & Evolutionary Search** | [`src/local_evolutionary_search.py`](src/local_evolutionary_search.py) | **Steepest-Ascent Hill Climbing** (1-flip and 2-swap neighborhoods), **Random-Restart Hill Climbing** (escaping local plateaus), and **Genetic Algorithm** (2-point crossover, bit-flip mutation, elitism). |
-| **Task 6 (Week 8 / Lab 7)** | **Dynamic Bayesian Networks, HMM & KF** | [`src/probabilistic_temporal.py`](src/probabilistic_temporal.py) | **2D Kalman Filter** (state space $[L_t, \dot{L}_t]^T$ for denoising SCADA substation telemetry) and **Hidden Markov Model (HMM)** with **Viterbi Decoding** (Normal, Stressed, Emergency operating states). |
+| **Task 5 (Week 7 / Lab 6)** | **Local & Evolutionary Search** | [`src/local_evolutionary_search.py`](src/local_evolutionary_search.py) | **Steepest-Ascent Hill Climbing** (1-flip and 2-swap neighborhoods) and **Genetic Algorithm** (2-point crossover, bit-flip mutation, elitism). |
+| **Probabilistic scheduling** | **Bayesian Network & Markov Model** | [`src/probabilistic_scheduler.py`](src/probabilistic_scheduler.py) | Discrete shortfall-state transition priors updated by Bayesian evidence; expected shortfall feeds the existing scheduler engines. |
 | **Task 7 (Week 10 / Lab 9)** | **Supervised Learning** | [`src/models.py`](src/models.py) | Scikit-learn **Linear Regression** and **Random Forest Regressor** for next-day demand prediction. |
 | **Task 8 (Week 12 / Lab 10)** | **Unsupervised Learning** | [`src/unsupervised_learning.py`](src/unsupervised_learning.py) | Pure NumPy **K-Means Clustering (Lloyd's Algorithm + K-Means++ init)** grouping city sectors into Critical, Heavy Industrial, Urban Commercial, and Flexible Agricultural archetypes. |
 | **Lab 11 (Week 13)** | **Reinforcement Learning** | [`src/reinforcement_learning.py`](src/reinforcement_learning.py) | **Tabular Q-Learning Agent** with state $(h, \text{DeficitBucket}, \text{DisparityBucket})$, $\epsilon$-greedy exploration with decay, learning multi-sector load shedding policies. |
@@ -101,9 +103,6 @@ $$J(x_1, \dots, x_k) = \frac{\left(\sum_{i=1}^k x_i\right)^2}{k \cdot \sum_{i=1}
 #### 3. Grid Power Balance: Demand vs Available Capacity vs Load Shed
 ![Power Balance Curve](images/demand_shortfall_dispatch.png)
 
-#### 4. SCADA Telemetry Denoising via 2D Kalman Filter
-![Kalman Filtering](images/kalman_filtering_comparison.png)
-
 ---
 
 ## 🔮 5. Supervised Learning: Next-Day Hourly Demand Forecasting
@@ -158,7 +157,7 @@ python gui/server.py
 *(Automatically opens `http://localhost:8000` in your default browser, or double-click `gui/index.html` to open directly).*
 
 ### 4. Run the Full Automated Test Suite
-Runs all 25 unit and integration tests across data processing, search algorithms, CSP, optimization, Kalman filtering, and ML models:
+Runs all unit and integration tests across data processing, search algorithms, CSP, optimization, and ML models:
 ```bash
 pytest tests -v
 ```
@@ -187,12 +186,13 @@ AI-Energy-Forecasting/
 │   ├── uninformed_search.py        # Task 2: BFS, DFS, and Uniform Cost Search (from scratch)
 │   ├── informed_search.py          # Task 3: Greedy Best-First and A* Search (from scratch)
 │   ├── csp_scheduler.py            # Task 4: CSP Backtracking with MRV & Forward Checking
-│   ├── local_evolutionary_search.py# Task 5: Steepest-Ascent & Random-Restart Hill Climbing, Genetic Algo
-│   ├── probabilistic_temporal.py   # Task 6: 2D Kalman Filter & HMM Viterbi Decoding (from scratch)
+│   ├── local_evolutionary_search.py# Task 5: Steepest-Ascent Hill Climbing, Genetic Algo
+│   ├── probabilistic_scheduler.py  # Markov shortfall transitions + Bayesian risk inference
+│   ├── maintenance_dispatch.py      # UCS route selection and 3-team maintenance dispatch
 │   ├── unsupervised_learning.py    # Task 8: Scratch K-Means Feeder Profiling (Lloyd's Algorithm)
 │   ├── reinforcement_learning.py   # Lab 11: Tabular Q-Learning Load Dispatch Agent
 │   ├── fairness_metrics.py         # Jain's Index, Gini Coefficient, Outage Spread & Auditing
-│   ├── visualization.py            # Matplotlib visualizer for heatmaps, fairness, and Kalman plots
+│   ├── visualization.py            # Matplotlib visualizer for heatmaps, fairness, and power balance
 │   ├── lab_showcase.py             # Master CLI runner executing all AI Lab syllabus tasks
 │   ├── data_loader.py              # Ingestion & synthetic fallback data generator
 │   ├── data_cleaner.py             # Deduplication, interpolation, missing hour imputation
@@ -200,11 +200,13 @@ AI-Energy-Forecasting/
 │   ├── models.py                   # Chronological train/test split & scikit-learn models
 │   ├── evaluate.py                 # Multi-metric evaluation utilities
 │   └── pipeline.py                 # Full ML training pipeline
-└── tests/                          # 25 Automated Unit & Integration Tests
+└── tests/                          # Automated Unit & Integration Tests
     ├── test_agents.py              # Tests for Task 1 Agent Architectures & PEAS
     ├── test_search_algorithms.py   # Tests for Tasks 2 & 3 (BFS, DFS, UCS, GBFS, A*)
     ├── test_csp_and_optimization.py# Tests for Tasks 4 & 5 (CSP, Hill Climbing, GA)
-    ├── test_ml_and_filtering.py    # Tests for Tasks 6, 7, 8, 9 (KF, HMM, OLS, K-Means, RL, Fairness)
+    ├── test_probabilistic_scheduler.py # Tests for Markov/Bayesian shortfall scheduling
+    ├── test_maintenance_dispatch.py # Tests for UCS team assignment and planned-outage rejection
+    ├── test_ml_and_filtering.py    # Tests for clustering, Q-Learning, and fairness
     ├── test_data_loader.py
     ├── test_data_cleaner.py
     ├── test_feature_engineering.py

@@ -158,6 +158,16 @@
           <span>24-Hour Schedule</span>
         </button>
 
+        <button id="nav-complaints" onclick="switchTab('complaints')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-screwdriver-wrench w-4 text-center"></i>
+          <span>Complaint & Maintenance</span>
+        </button>
+
+        <button id="nav-clustering" onclick="switchTab('clustering')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i class="fa-solid fa-circle-nodes w-4 text-center"></i>
+          <span>Feeder Clustering</span>
+        </button>
+
         <button id="nav-fairness" onclick="switchTab('fairness')" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
           <i class="fa-solid fa-chart-pie w-4 text-center"></i>
           <span>Fairness Analysis</span>
@@ -508,7 +518,6 @@
                   <select id="dashboardAlgoSelect" onchange="selectAlgorithm(this.value)" class="flex-1 px-3 py-2 rounded-lg border border-indigo-200 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                     <option value="csp">CSP Backtracking (MRV + Forward Checking)</option>
                     <option value="hill_climbing">Steepest-Ascent Hill Climbing</option>
-                    <option value="random_restart">Random-Restart Hill Climbing</option>
                     <option value="genetic">Genetic Algorithm</option>
                   </select>
                   <button onclick="selectAlgorithm(document.getElementById('dashboardAlgoSelect')?.value || 'csp')" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700">
@@ -520,6 +529,7 @@
 
             <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
               <span>Active: <strong id="activeAlgoLabel" class="text-slate-800">CSP Backtracking</strong></span>
+              <span id="schedulerStatus" class="text-slate-500" role="status" aria-live="polite"></span>
               <span class="text-emerald-600 font-bold"><i class="fa-solid fa-check"></i> 0 Violations</span>
             </div>
           </div>
@@ -611,24 +621,25 @@
               </button>
             </div>
           </div>
+          <p id="edaStatus" class="text-xs text-slate-500 mb-4" role="status" aria-live="polite">Loading EDA data…</p>
 
           <!-- EDA Statistics Cards -->
           <div class="grid grid-cols-4 gap-4 mb-6">
             <div class="p-3.5 bg-blue-50/60 border border-blue-100 rounded-xl">
               <p class="text-[11px] font-semibold text-blue-600">Filtered Records</p>
-              <h4 id="edaCount" class="text-xl font-extrabold text-blue-950 mt-0.5">17,376 hrs</h4>
+              <h4 id="edaCount" class="text-xl font-extrabold text-blue-950 mt-0.5">—</h4>
             </div>
             <div class="p-3.5 bg-purple-50/60 border border-purple-100 rounded-xl">
               <p class="text-[11px] font-semibold text-purple-600">Mean Demand</p>
-              <h4 id="edaMean" class="text-xl font-extrabold text-purple-950 mt-0.5">15,134 MW</h4>
+              <h4 id="edaMean" class="text-xl font-extrabold text-purple-950 mt-0.5">—</h4>
             </div>
             <div class="p-3.5 bg-rose-50/60 border border-rose-100 rounded-xl">
               <p class="text-[11px] font-semibold text-rose-600">Peak Load</p>
-              <h4 id="edaMax" class="text-xl font-extrabold text-rose-950 mt-0.5">18,825 MW</h4>
+              <h4 id="edaMax" class="text-xl font-extrabold text-rose-950 mt-0.5">—</h4>
             </div>
             <div class="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl">
               <p class="text-[11px] font-semibold text-emerald-600">Min Base Load</p>
-              <h4 id="edaMin" class="text-xl font-extrabold text-emerald-950 mt-0.5">11,200 MW</h4>
+              <h4 id="edaMin" class="text-xl font-extrabold text-emerald-950 mt-0.5">—</h4>
             </div>
           </div>
 
@@ -797,10 +808,9 @@
           <div class="p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
               <label class="text-xs font-bold text-slate-700 block mb-1">Algorithm Engine:</label>
-              <select id="liveAlgoSelect" class="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white font-semibold">
+              <select id="liveAlgoSelect" onchange="selectAlgorithm(this.value)" class="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white font-semibold">
                 <option value="csp">CSP Backtracking (MRV + Forward Checking)</option>
                 <option value="hill_climbing">Steepest-Ascent Hill Climbing</option>
-                <option value="random_restart">Random-Restart Hill Climbing</option>
                 <option value="genetic">Genetic Algorithm (Evolutionary)</option>
               </select>
             </div>
@@ -825,10 +835,11 @@
               <label for="chkHospital" class="text-xs font-semibold text-slate-700">Strict Hospital Feeder Exemption (0h)</label>
             </div>
 
-            <div class="flex justify-end">
-              <button onclick="runLiveScheduler()" class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-md transition-all">
+            <div class="flex flex-col items-end gap-1">
+              <button id="runSchedulerButton" onclick="runLiveScheduler()" class="w-full px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-md transition-all">
                 <i class="fa-solid fa-play mr-1.5"></i> Run Live Scheduler
               </button>
+              <span id="liveSchedulerStatus" class="text-xs text-slate-500" role="status" aria-live="polite"></span>
             </div>
           </div>
 
@@ -896,6 +907,87 @@
                 </tr>
               </thead>
               <tbody id="fullScheduleTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== COMPLAINT & MAINTENANCE ==================== -->
+      <div id="view-complaints" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">Complaint & Maintenance Dispatch</h2>
+              <p class="text-xs text-slate-500 mt-1">Review public outage complaints and assign available maintenance teams.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" id="complaintTeamStatus"></div>
+
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-bold text-slate-800">Pending complaints</h3>
+              <span id="complaintPendingCount" class="text-xs font-bold text-amber-700">0 pending</span>
+            </div>
+            <div id="complaintDispatchList" class="space-y-3"></div>
+          </div>
+
+          <div class="mt-6 bg-white border border-slate-200 rounded-xl p-4">
+            <h3 class="text-sm font-bold text-slate-800 mb-3">Complaint history</h3>
+            <div id="complaintHistory" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== FEEDER CLUSTERING ==================== -->
+      <div id="view-clustering" class="space-y-6 tab-view hidden">
+        <div class="glass-card p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h2 class="text-xl font-bold text-slate-800">Feeder Clustering</h2>
+              <p class="text-xs text-slate-500 mt-1">Scratch K-Means profiles the 10 feeders by load, disruption cost, priority, quota, and critical status.</p>
+            </div>
+            <button onclick="switchTab('dashboard')" class="px-3 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg">&larr; Back to Dashboard</button>
+          </div>
+
+          <div class="flex flex-wrap items-end gap-3 mb-5 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <div>
+              <label for="clusterCount" class="block text-xs font-bold text-slate-700 mb-1">Number of clusters</label>
+              <select id="clusterCount" class="text-xs p-2 border border-slate-300 rounded-lg bg-white">
+                <option value="2">2 clusters</option>
+                <option value="3">3 clusters</option>
+                <option value="4" selected>4 clusters</option>
+                <option value="5">5 clusters</option>
+              </select>
+            </div>
+            <button type="button" onclick="loadFeederClusters()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">Run K-Means</button>
+            <span id="clusterStatus" class="text-xs text-slate-500" role="status"></span>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div class="lg:col-span-2 p-4 bg-white border border-slate-200 rounded-xl">
+              <h3 class="text-sm font-bold text-slate-800 mb-2">Feeder Clusters: Base Load vs Disruption Cost</h3>
+              <div class="h-80"><canvas id="feederClusterChart"></canvas></div>
+            </div>
+            <div class="p-4 bg-white border border-slate-200 rounded-xl">
+              <h3 class="text-sm font-bold text-slate-800 mb-3">Cluster Summary</h3>
+              <div id="clusterSummary" class="space-y-2"></div>
+            </div>
+          </div>
+
+          <div class="mt-5 overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-500">
+                  <th class="py-2">Feeder</th>
+                  <th>Cluster</th>
+                  <th>Profile</th>
+                  <th>Base MW</th>
+                  <th>Cost/hr</th>
+                </tr>
+              </thead>
+              <tbody id="clusterTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -1026,22 +1118,6 @@
             </div>
 
             <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
-              <div class="flex items-center justify-between mb-2">
-                <h4 class="text-sm font-bold text-slate-800"><i class="fa-solid fa-wave-square text-emerald-600 mr-2"></i>Task 6: 2D Kalman Filter & HMM</h4>
-                <button onclick="runExperimentAPI('kalman')" class="text-[11px] px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded">Denoise Sensor</button>
-              </div>
-              <p class="text-xs text-slate-600 mb-3">Recursive state-space estimator denoising raw SCADA telemetry and Viterbi algorithm decoding hidden grid stress states.</p>
-              <div id="expKalmanResults" class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono mb-2">
-                <div>• Raw Sensor Noise: std = 100 MW (Telemetry Variance)</div>
-                <div>• Kalman Filter Estimate: Filters noise with zero lag</div>
-                <div>• HMM Viterbi: Decodes [Normal, Stressed, Emergency] states</div>
-              </div>
-              <div class="h-36 w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5">
-                <canvas id="kalmanChart"></canvas>
-              </div>
-            </div>
-
-            <div class="p-4.5 rounded-xl border border-slate-200 bg-white">
               <h4 class="text-sm font-bold text-slate-800 mb-2"><i class="fa-solid fa-brain text-purple-600 mr-2"></i>Task 7: Supervised Regression</h4>
               <p class="text-xs text-slate-600 mb-3">Random Forest Regressor compared with Linear Regression.</p>
               <div class="text-[11px] space-y-1 bg-slate-50 p-2.5 rounded-lg font-mono">
@@ -1110,6 +1186,6 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
