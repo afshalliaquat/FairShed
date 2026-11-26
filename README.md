@@ -1,7 +1,7 @@
 # ⚡ Electricity Demand Forecast & Fair Load-Shedding Scheduler
 
 > **Project 24 | High Difficulty**  
-> **Core AI Techniques**: Supervised Regression, Bayesian Networks, Markov Models, Constraint Satisfaction Problems (CSP), Hill Climbing & Local Search, Heuristic Search ($A^*$), Evolutionary Algorithms, Unsupervised Clustering, and Reinforcement Learning (Q-Learning).
+> **Core AI Techniques**: Supervised Regression, Bayesian Networks, Markov Models, Constraint Satisfaction Problems (CSP), Hill Climbing & Local Search, Heuristic Search ($A^*$), Evolutionary Algorithms, and Unsupervised Clustering.
 > **Tools & Libraries**: Pure Python (zero external optimization/search libraries), NumPy, Pandas, Scikit-learn, Matplotlib.
 
 ---
@@ -36,7 +36,6 @@ The retained AI lab tasks from the syllabus are implemented **from scratch in pu
 | **Probabilistic scheduling** | **Bayesian Network & Markov Model** | [`src/probabilistic_scheduler.py`](src/probabilistic_scheduler.py) | Discrete shortfall-state transition priors updated by Bayesian evidence; expected shortfall feeds the existing scheduler engines. |
 | **Task 7 (Week 10 / Lab 9)** | **Supervised Learning** | [`src/models.py`](src/models.py) | Scikit-learn **Linear Regression** and **Random Forest Regressor** for next-day demand prediction. |
 | **Task 8 (Week 12 / Lab 10)** | **Unsupervised Learning** | [`src/unsupervised_learning.py`](src/unsupervised_learning.py) | Pure NumPy **K-Means Clustering (Lloyd's Algorithm + K-Means++ init)** grouping city sectors into Critical, Heavy Industrial, Urban Commercial, and Flexible Agricultural archetypes. |
-| **Lab 11 (Week 13)** | **Reinforcement Learning** | [`src/reinforcement_learning.py`](src/reinforcement_learning.py) | **Tabular Q-Learning Agent** with state $(h, \text{DeficitBucket}, \text{DisparityBucket})$, $\epsilon$-greedy exploration with decay, learning multi-sector load shedding policies. |
 
 ---
 
@@ -90,7 +89,6 @@ $$J(x_1, \dots, x_k) = \frac{\left(\sum_{i=1}^k x_i\right)^2}{k \cdot \sum_{i=1}
 | **CSP Backtracking (MRV + FC)** | **0.960** | **0.64 h** | **2 h** | **78.8%** | **0 h** | **0** | **0** | **Yes** |
 | **Steepest-Ascent Hill Climbing** | **0.960** | **0.64 h** | **2 h** | **78.8%** | **0 h** | **0** | **0** | **Yes** |
 | **Genetic Algorithm (Evolutionary)** | 0.913 | 1.81 h | 6 h | 78.8% | 0 h | 0 | 0 | Yes |
-| **Tabular Q-Learning Agent** | 0.683 | 3.02 h | 8 h | 78.8% | 0 h | 0 | 2 | Partial |
 
 ### 📈 Diagnostic Visualizations
 
@@ -190,10 +188,9 @@ AI-Energy-Forecasting/
 │   ├── probabilistic_scheduler.py  # Markov shortfall transitions + Bayesian risk inference
 │   ├── maintenance_dispatch.py      # UCS route selection and 3-team maintenance dispatch
 │   ├── unsupervised_learning.py    # Task 8: Scratch K-Means Feeder Profiling (Lloyd's Algorithm)
-│   ├── reinforcement_learning.py   # Lab 11: Tabular Q-Learning Load Dispatch Agent
 │   ├── fairness_metrics.py         # Jain's Index, Gini Coefficient, Outage Spread & Auditing
 │   ├── visualization.py            # Matplotlib visualizer for heatmaps, fairness, and power balance
-│   ├── lab_showcase.py             # Master CLI runner executing all AI Lab syllabus tasks
+│   ├── lab_showcase.py             # CLI runner for the retained AI Lab syllabus tasks
 │   ├── data_loader.py              # Ingestion & synthetic fallback data generator
 │   ├── data_cleaner.py             # Deduplication, interpolation, missing hour imputation
 │   ├── feature_engineering.py      # Cyclical trigonometric & lag engineering
@@ -206,7 +203,7 @@ AI-Energy-Forecasting/
     ├── test_csp_and_optimization.py# Tests for Tasks 4 & 5 (CSP, Hill Climbing, GA)
     ├── test_probabilistic_scheduler.py # Tests for Markov/Bayesian shortfall scheduling
     ├── test_maintenance_dispatch.py # Tests for UCS team assignment and planned-outage rejection
-    ├── test_ml_and_filtering.py    # Tests for clustering, Q-Learning, and fairness
+    ├── test_ml_and_filtering.py    # Tests for clustering and fairness metrics
     ├── test_data_loader.py
     ├── test_data_cleaner.py
     ├── test_feature_engineering.py

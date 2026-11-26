@@ -4,7 +4,7 @@ Serves the modern FairShed HTML5/Tailwind/Chart.js GUI using Python's built-in
 standard library HTTP server. Provides complete REST API endpoints powering:
 1. EDA & Time Series Filtering
 2. Next-Day Demand Forecasting (Random Forest, Linear Regression)
-3. Live Fair Load-Shedding Scheduler (CSP Backtracking, Hill Climbing, Genetic Algorithm, Q-Learning)
+3. Live Fair Load-Shedding Scheduler (CSP Backtracking, Hill Climbing, Genetic Algorithm)
 4. AI Syllabus Experiments (Search BFS/DFS/A*, K-Means)
 5. Interactive What-If Scenario Simulator
 """

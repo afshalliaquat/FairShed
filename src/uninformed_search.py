@@ -19,8 +19,6 @@ from src.city_grid import FeederArea, CityGridNetwork
 
 @dataclass
 class SearchResult:
-    """Contains diagnostics and solution found by a search algorithm."""
-
     algorithm_name: str
     target_shortfall_mw: float
     selected_feeder_ids: List[str]
@@ -34,7 +32,6 @@ class SearchResult:
 def _get_eligible_feeders(
     grid: CityGridNetwork, hour: int, is_ramadan: bool
 ) -> List[FeederArea]:
-    """Filters out feeders that cannot be shed (Hospital exempt & Ramadan protected)."""
     return [
         f for f in grid.feeders
         if not f.is_critical_exempt and not f.is_protected_at_hour(hour, is_ramadan)
@@ -48,16 +45,10 @@ def breadth_first_search_shedding(
     area_demands: Dict[str, float],
     is_ramadan: bool = True,
 ) -> SearchResult:
-    """BFS: Level-order tree traversal to find the feeder combination with MINIMAL FEEDERS shed.
-
-    Time Complexity: O(b^d), Space Complexity: O(b^d).
-    Uses collections.deque FIFO queue.
-    """
     if target_shortfall_mw <= 0.0:
         return SearchResult("BFS", 0.0, [], 0.0, 0.0, 0.0, 0, True)
 
     eligible = _get_eligible_feeders(grid, hour, is_ramadan)
-    # State: (feeder_index, current_shed_mw, tuple_of_shed_ids, accumulated_cost)
     queue = deque([(0, 0.0, (), 0.0)])
     visited = set()
     nodes_expanded = 0
@@ -66,7 +57,6 @@ def breadth_first_search_shedding(
         idx, current_mw, shed_ids, current_cost = queue.popleft()
         nodes_expanded += 1
 
-        # Goal test: covers the required deficit
         if current_mw >= target_shortfall_mw:
             overshed = current_mw - target_shortfall_mw
             return SearchResult(
@@ -91,7 +81,6 @@ def breadth_first_search_shedding(
         feeder = eligible[idx]
         feeder_load = area_demands.get(feeder.area_id, feeder.base_load_mw)
 
-        # Branch 1: Shed this feeder
         queue.append(
             (
                 idx + 1,
@@ -101,7 +90,6 @@ def breadth_first_search_shedding(
             )
         )
 
-        # Branch 2: Keep feeder energized (don't shed)
         queue.append((idx + 1, current_mw, shed_ids, current_cost))
 
     return SearchResult("Breadth-First Search (BFS)", target_shortfall_mw, [], 0.0, 0.0, 0.0, nodes_expanded, False)
@@ -114,10 +102,6 @@ def depth_first_search_shedding(
     area_demands: Dict[str, float],
     is_ramadan: bool = True,
 ) -> SearchResult:
-    """DFS: LIFO stack exploration for fast discovery of any feasible shedding combination.
-
-    Time Complexity: O(b^m), Space Complexity: O(b * m).
-    """
     if target_shortfall_mw <= 0.0:
         return SearchResult("DFS", 0.0, [], 0.0, 0.0, 0.0, 0, True)
 
@@ -154,7 +138,6 @@ def depth_first_search_shedding(
         feeder = eligible[idx]
         feeder_load = area_demands.get(feeder.area_id, feeder.base_load_mw)
 
-        # Push keep-alive first so shedding branch is popped first (greedy dive)
         stack.append((idx + 1, current_mw, shed_ids, current_cost))
         stack.append(
             (
@@ -175,17 +158,10 @@ def uniform_cost_search_shedding(
     area_demands: Dict[str, float],
     is_ramadan: bool = True,
 ) -> SearchResult:
-    """Uniform Cost Search (UCS / Dijkstra): Priority queue search.
-
-    Guaranteed to find the feeder combination that covers the shortfall with
-    MINIMAL TOTAL SOCIO-ECONOMIC DISRUPTION COST.
-    Priority key: cumulative disruption cost g(n).
-    """
     if target_shortfall_mw <= 0.0:
         return SearchResult("UCS", 0.0, [], 0.0, 0.0, 0.0, 0, True)
 
     eligible = _get_eligible_feeders(grid, hour, is_ramadan)
-    # Heap tuple: (accumulated_cost, counter, idx, current_mw, tuple_of_shed_ids)
     pq: List[Tuple[float, int, int, float, Tuple[str, ...]]] = []
     counter = 0
     heapq.heappush(pq, (0.0, counter, 0, 0.0, ()))
@@ -220,7 +196,6 @@ def uniform_cost_search_shedding(
         feeder = eligible[idx]
         feeder_load = area_demands.get(feeder.area_id, feeder.base_load_mw)
 
-        # Action 1: Shed this feeder (pays disruption cost)
         counter += 1
         heapq.heappush(
             pq,
@@ -233,7 +208,6 @@ def uniform_cost_search_shedding(
             ),
         )
 
-        # Action 2: Keep powered (0 additional cost)
         counter += 1
         heapq.heappush(pq, (cost, counter, idx + 1, current_mw, shed_ids))
 

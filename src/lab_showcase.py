@@ -1,6 +1,6 @@
-"""Master AI Lab Syllabus Showcase Runner.
+"""AI Lab Showcase Runner for the retained syllabus tasks.
 
-Demonstrates the proper working of ALL tasks without advanced library usage:
+Demonstrates the retained lab tasks without advanced library usage:
 - Task 1: Types of Agents, Environments to implement (PEAS & 4 Agent Classes)
 - Task 2 (Lab 3): Uninformed Searching Algorithms (BFS, DFS, UCS)
 - Task 3 (Lab 4): Informed Searching Algorithms (Greedy Best-First, A*)
@@ -8,7 +8,6 @@ Demonstrates the proper working of ALL tasks without advanced library usage:
 - Task 5 (Lab 6): Local (Hill Climbing) & Evolutionary (Genetic Algorithm) Search
 - Task 7 (Lab 9): Supervised Learning (Linear Regression & Random Forest)
 - Task 8 (Lab 10): Unsupervised Learning (Scratch K-Means Feeder Profiling)
-- Lab 11: Reinforcement Learning (Tabular Q-Learning Grid Dispatch)
 """
 
 import os
@@ -62,7 +61,6 @@ from src.local_evolutionary_search import (
 from src.models import chronological_split, train_linear_regression, train_random_forest
 from src.evaluate import evaluate_all_models
 from src.unsupervised_learning import cluster_city_feeders
-from src.reinforcement_learning import TabularQGridAgent
 from src.fairness_metrics import evaluate_schedule_fairness
 from src.visualization import (
     plot_fairness_outage_chart,
@@ -261,28 +259,17 @@ def run_all_labs_showcase():
     print(clustering_res.feeder_profiles_df[["area_id", "name", "base_load_mw", "profile_archetype"]].to_string(index=False))
 
     # -------------------------------------------------------------------------
-    # LAB 11: Reinforcement Learning (Tabular Q-Learning)
-    # -------------------------------------------------------------------------
-    print_banner("Reinforcement Learning: Q-Learning Grid Dispatch", "Task 9 (Week 13 / Lab 11)")
-    rl_agent = TabularQGridAgent(grid, learning_rate=0.15, discount_factor=0.95, seed=42)
-    rl_res = rl_agent.train(hourly_shortfalls, area_demands, num_episodes=100, is_ramadan=True)
-    print(f"Q-Learning Trained for {rl_res.episodes} episodes | Q-table size: {rl_res.q_table_size} state-action pairs")
-    print(f"Final Epsilon: {rl_res.final_epsilon} | Hospital Violations: {len(rl_res.policy_violations)}")
-
-    # -------------------------------------------------------------------------
     # FAIRNESS AUDIT & BENCHMARK SUMMARY
     # -------------------------------------------------------------------------
     print_banner("Fairness Audit & Multi-Algorithm Scheduler Benchmark", "Fairness Evaluation")
     report_csp = evaluate_schedule_fairness("CSP Backtracking", csp_res.schedule_matrix, grid.feeders, hourly_shortfalls, area_demands, is_ramadan=True)
     report_hc = evaluate_schedule_fairness("Hill Climbing", hc_res.best_schedule, grid.feeders, hourly_shortfalls, area_demands, is_ramadan=True)
     report_ga = evaluate_schedule_fairness("Genetic Algorithm", ga_res.best_schedule, grid.feeders, hourly_shortfalls, area_demands, is_ramadan=True)
-    report_rl = evaluate_schedule_fairness("Q-Learning Policy", rl_res.policy_schedule, grid.feeders, hourly_shortfalls, area_demands, is_ramadan=True)
 
     benchmark_df = pd.DataFrame([
         report_csp.to_dict(),
         report_hc.to_dict(),
         report_ga.to_dict(),
-        report_rl.to_dict(),
     ])
     print(benchmark_df.to_string(index=False))
 
@@ -294,7 +281,6 @@ def run_all_labs_showcase():
         "CSP Backtracking": csp_res.area_outage_hours,
         "Hill Climbing": hc_res.area_outage_hours,
         "Genetic Algorithm": ga_res.area_outage_hours,
-        "Q-Learning": rl_res.policy_outages,
     }
     f1 = plot_fairness_outage_chart(outages_by_algo, grid.feeders)
     f2 = plot_load_shedding_heatmap(csp_res.schedule_matrix, grid.feeders, "CSP Backtracking")
